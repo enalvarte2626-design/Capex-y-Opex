@@ -1,0 +1,148 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #faf9f8;
+  --card: #ffffff;
+  --texto: #201f1e;
+  --texto-suave: #605e5c;
+  --borde: #e1dfdd;
+  /* Rojo corporativo Expertia */
+  --acento: #c8102e;
+  --acento-fuerte: #970c22;
+  --acento-suave: #fbe7ea;
+  --exito: #107c10;
+  --alerta: #d83b01;
+  --peligro: #a4262c;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-texto: var(--texto);
+  --color-acento: var(--acento);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Sube un poco el tamaño base de letras y números en toda la app (CAPEX y OPEX) — todas
+   las clases de Tailwind (text-xs, text-sm, kpi-valor, etc.) usan rem, así que escalan
+   juntas y proporcionalmente al subir esto, sin tener que tocar cada componente. */
+html {
+  font-size: 17px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--texto);
+  font-family: "Segoe UI", "Segoe UI Variable", system-ui, -apple-system, Arial, sans-serif;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.boton-primario {
+  background: var(--acento);
+  color: white;
+  border-radius: 10px;
+  font-weight: 600;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  transition: background 0.15s ease;
+}
+.boton-primario:hover {
+  background: var(--acento-fuerte);
+}
+.boton-primario:disabled {
+  background: var(--borde);
+  color: var(--texto-suave);
+  cursor: not-allowed;
+}
+
+.boton-secundario {
+  background: white;
+  color: var(--acento-fuerte);
+  border: 1px solid var(--acento);
+  border-radius: 10px;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  transition: background 0.15s ease;
+}
+.boton-secundario:hover {
+  background: var(--acento-suave);
+}
+.boton-secundario:disabled {
+  background: white;
+  color: var(--texto-suave);
+  border-color: var(--borde);
+  cursor: not-allowed;
+}
+
+.chip {
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  background: white;
+  color: var(--texto-suave);
+  transition: all 0.15s ease;
+}
+.chip[data-activo="true"] {
+  background: var(--acento-suave);
+  border-color: var(--acento);
+  color: var(--acento-fuerte);
+}
+
+.etiqueta {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  margin-bottom: 0.25rem;
+  display: block;
+}
+
+/* Input/select/textarea de formularios y filtros — antes no tenían ningún estilo propio
+   (quedaban con la apariencia mínima del navegador, casi invisibles sobre el fondo de la
+   tarjeta). Borde y fondo marcados + anillo rojo al enfocar, para que se note de un
+   vistazo dónde hay que escribir. */
+.campo {
+  background: var(--card);
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  color: var(--texto);
+  width: 100%;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.campo::placeholder {
+  color: var(--texto-suave);
+}
+.campo:hover:not(:disabled) {
+  border-color: #c8c6c4;
+}
+.campo:focus {
+  outline: none;
+  border-color: var(--acento);
+  box-shadow: 0 0 0 3px var(--acento-suave);
+}
+.campo:disabled {
+  background: var(--bg);
+  color: var(--texto-suave);
+  cursor: not-allowed;
+}
+
+.kpi-valor {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
