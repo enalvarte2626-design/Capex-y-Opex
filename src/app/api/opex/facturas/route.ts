@@ -32,6 +32,7 @@ export async function GET() {
     return NextResponse.json({
       lineas: lineas.map((l) => ({
         filaExcel: l.filaExcel,
+        empresa: l.subNegocio,
         grupoGasto: l.grupoNegocio,
         subgrupoGasto: l.prioridad,
         lineaGasto: l.proyecto,

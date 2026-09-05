@@ -9,6 +9,7 @@ import type { FacturaOpex } from "@/lib/opex-parse";
 
 interface LineaOpcion {
   filaExcel: number;
+  empresa: string;
   grupoGasto: string;
   subgrupoGasto: string;
   lineaGasto: string;
@@ -25,6 +26,7 @@ export default function FacturasOpex() {
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [empresaSel, setEmpresaSel] = useState("");
   const [grupoSel, setGrupoSel] = useState("");
   const [subgrupoSel, setSubgrupoSel] = useState("");
   const [lineaSel, setLineaSel] = useState("");
@@ -76,20 +78,34 @@ export default function FacturasOpex() {
     cargar();
   }, []);
 
-  const grupos = useMemo(() => Array.from(new Set((datos?.lineas ?? []).map((l) => l.grupoGasto))).sort(), [datos]);
+  const empresas = useMemo(() => Array.from(new Set((datos?.lineas ?? []).map((l) => l.empresa).filter(Boolean))).sort(), [datos]);
+
+  const grupos = useMemo(() => {
+    const lista = (datos?.lineas ?? []).filter((l) => !empresaSel || l.empresa === empresaSel);
+    return Array.from(new Set(lista.map((l) => l.grupoGasto))).sort();
+  }, [datos, empresaSel]);
 
   const subgrupos = useMemo(() => {
-    const lista = (datos?.lineas ?? []).filter((l) => !grupoSel || l.grupoGasto === grupoSel);
+    const lista = (datos?.lineas ?? []).filter(
+      (l) => (!empresaSel || l.empresa === empresaSel) && (!grupoSel || l.grupoGasto === grupoSel)
+    );
     return Array.from(new Set(lista.map((l) => l.subgrupoGasto))).sort();
-  }, [datos, grupoSel]);
+  }, [datos, empresaSel, grupoSel]);
 
   const lineasDisponibles = useMemo(() => {
     return (datos?.lineas ?? []).filter(
-      (l) => (!grupoSel || l.grupoGasto === grupoSel) && (!subgrupoSel || l.subgrupoGasto === subgrupoSel)
+      (l) =>
+        (!empresaSel || l.empresa === empresaSel) &&
+        (!grupoSel || l.grupoGasto === grupoSel) &&
+        (!subgrupoSel || l.subgrupoGasto === subgrupoSel)
     );
-  }, [datos, grupoSel, subgrupoSel]);
+  }, [datos, empresaSel, grupoSel, subgrupoSel]);
 
-  // Al cambiar Grupo, el Subgrupo/Línea elegidos antes pueden ya no aplicar.
+  // Al cambiar Empresa/Grupo, las opciones elegidas antes en los filtros dependientes
+  // pueden ya no aplicar.
+  useEffect(() => {
+    setGrupoSel("");
+  }, [empresaSel]);
   useEffect(() => {
     setSubgrupoSel("");
     setLineaSel("");
@@ -186,9 +202,26 @@ export default function FacturasOpex() {
       <form onSubmit={registrar} className="card p-4 flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="etiqueta">Grupo de Gasto</label>
-            <select className="campo" value={grupoSel} onChange={(e) => setGrupoSel(e.target.value)} required>
+            <label className="etiqueta">Empresa</label>
+            <select className="campo" value={empresaSel} onChange={(e) => setEmpresaSel(e.target.value)} required>
               <option value="">Selecciona…</option>
+              {empresas.map((e) => (
+                <option key={e} value={e}>
+                  {e}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="etiqueta">Grupo de Gasto</label>
+            <select
+              className="campo"
+              value={grupoSel}
+              onChange={(e) => setGrupoSel(e.target.value)}
+              disabled={!empresaSel}
+              required
+            >
+              <option value="">{empresaSel ? "Selecciona…" : "Primero elige una empresa"}</option>
               {grupos.map((g) => (
                 <option key={g} value={g}>
                   {g}
