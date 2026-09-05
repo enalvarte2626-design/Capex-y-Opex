@@ -60,15 +60,11 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
-  // No se permite registrar en un mes que ya pasó — evita sumar por error al Gasto Real
-  // de un mes ya cerrado. Nunca se confía solo en que el formulario oculte esa opción.
+  // Un mes ya pasado sí se puede registrar (queda en el historial de "Facturas Opex -
+  // App"), pero NUNCA suma al Gasto Real de Presupuesto 2026 — ese presupuesto ya se dio
+  // por cerrado para ese mes. Solo el mes actual o uno futuro mueven el presupuesto.
   const mesActualReal = new Date().getMonth() + 1;
-  if (mes < mesActualReal) {
-    return NextResponse.json(
-      { error: "No se puede registrar una factura en un mes que ya pasó. Elige el mes actual o uno futuro." },
-      { status: 400 }
-    );
-  }
+  const esMesPasado = mes < mesActualReal;
   if (!Number.isFinite(montoSoles) || montoSoles <= 0) {
     return NextResponse.json({ error: "El monto en Soles debe ser mayor a 0." }, { status: 400 });
   }
@@ -126,11 +122,24 @@ export async function POST(request: Request) {
       numeroComprobante?.trim() ?? "",
       linea.responsable,
       comentario?.trim() ?? "",
-      "ok",
+      esMesPasado ? "ok (mes pasado, no afecta presupuesto)" : "ok",
       montoSoles,
       tipoCambio,
       linea.subNegocio,
     ]);
+
+    // Un mes pasado queda solo en el historial — nunca toca Presupuesto 2026.
+    if (esMesPasado) {
+      return NextResponse.json({
+        ok: true,
+        filaFactura: filaNueva,
+        monto,
+        montoSoles,
+        tipoCambio,
+        presupuestoActualizado: false,
+        aviso: "Mes pasado: la factura quedó registrada en el historial, pero no se sumó al Gasto Real de Presupuesto 2026.",
+      });
+    }
 
     // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en Presupuesto 2026.
     const colReal = columnaALetra(COL_PPTO_OPEX.primerMesReal + (mes - 1) * 2);
@@ -145,6 +154,7 @@ export async function POST(request: Request) {
       monto,
       montoSoles,
       tipoCambio,
+      presupuestoActualizado: true,
       celdaActualizada: `${hojaPresupuesto}!${direccionReal}`,
       gastoRealAnterior: valorActual,
       gastoRealNuevo: nuevoValor,

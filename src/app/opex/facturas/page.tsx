@@ -139,8 +139,12 @@ export default function FacturasOpex() {
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
     const montoUsd = Math.round((montoSoles / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+    const esMesPasado = Number(form.mes) < mesActualReal;
     const confirmado = window.confirm(
-      `¿Registrar factura de S/ ${montoSoles.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO} — para "${lineaElegida.lineaGasto}", período ${mesTexto}? Esto suma ${moneda2(montoUsd)} al Gasto Real de ${mesTexto} en Presupuesto 2026.`
+      `¿Registrar factura de S/ ${montoSoles.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO} — para "${lineaElegida.lineaGasto}", período ${mesTexto}? ` +
+        (esMesPasado
+          ? `${mesTexto} ya pasó: esto NO va a sumar al Gasto Real de Presupuesto 2026, solo queda en el historial.`
+          : `Esto suma ${moneda2(montoUsd)} al Gasto Real de ${mesTexto} en Presupuesto 2026.`)
     );
     if (!confirmado) return;
 
@@ -163,7 +167,9 @@ export default function FacturasOpex() {
       if (!res.ok) throw new Error(json.error || "No se pudo registrar la factura.");
       setMensaje({
         tipo: "ok",
-        texto: `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`,
+        texto: json.presupuestoActualizado
+          ? `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`
+          : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? "No se modificó el Presupuesto 2026."}`,
       });
       setForm((prev) => ({ ...prev, montoSoles: "", numeroComprobante: "", comentario: "" }));
       await cargar();
@@ -272,19 +278,18 @@ export default function FacturasOpex() {
           <div>
             <label className="etiqueta">Mes (período real del gasto)</label>
             <select className="campo" value={form.mes} onChange={(e) => setForm((p) => ({ ...p, mes: e.target.value }))} required>
-              {NOMBRES_MES_CIERRE.map((nombre, i) => {
-                const mes = i + 1;
-                // No se permite registrar en un mes ya pasado — evita sumar por error al
-                // Gasto Real de un mes que ya se dio por cerrado. El servidor valida lo
-                // mismo (nunca confía solo en que el navegador oculte la opción).
-                if (mes < mesActualReal) return null;
-                return (
-                  <option key={nombre} value={mes}>
-                    {nombre}
-                  </option>
-                );
-              })}
+              {NOMBRES_MES_CIERRE.map((nombre, i) => (
+                <option key={nombre} value={i + 1}>
+                  {nombre}
+                </option>
+              ))}
             </select>
+            {Number(form.mes) < mesActualReal && (
+              <p className="text-xs mt-1" style={{ color: "var(--alerta)" }}>
+                Mes ya pasado: la factura queda en el historial pero NO se suma al
+                Presupuesto 2026 de ese mes.
+              </p>
+            )}
           </div>
           <div>
             <label className="etiqueta">Monto en Soles (sin IGV)</label>
