@@ -26,9 +26,11 @@ export const COL_PPTO_OPEX = {
  *
  * `montoSoles` y `tipoCambio` se agregaron para la regularización de facturas en Soles
  * sin IGV: `monto` (columna F, la que de verdad mueve el Gasto Real) siempre queda en
- * USD, calculado como `montoSoles / tipoCambio` — nunca se pide el USD directo. Van al
- * final de la fila para no correr ninguna columna existente: las facturas registradas
- * antes de este cambio simplemente quedan con esas dos celdas vacías.
+ * USD, calculado como `montoSoles / tipoCambio` — nunca se pide el USD directo. `empresa`
+ * se agregó después, para que la base de gastos quede completa con todos los campos que
+ * ya se piden en el formulario (antes solo se usaba para filtrar, no se guardaba). Todas
+ * van al final de la fila para no correr ninguna columna existente: las facturas
+ * registradas antes de cada cambio simplemente quedan con esas celdas vacías.
  */
 export const COL_FACTURAS_OPEX = {
   fecha: 0,
@@ -45,6 +47,7 @@ export const COL_FACTURAS_OPEX = {
   registrado: 11,
   montoSoles: 12, // Monto en Soles sin IGV — lo que realmente ingresa la persona
   tipoCambio: 13, // Tipo de cambio usado para convertir esta factura en particular
+  empresa: 14, // Empresa de la línea de gasto elegida (viene de Presupuesto 2026)
 } as const;
 
 export const ENCABEZADOS_FACTURAS_OPEX = [
@@ -62,6 +65,7 @@ export const ENCABEZADOS_FACTURAS_OPEX = [
   "Registrado",
   "Monto Soles (sin IGV)",
   "Tipo de Cambio",
+  "Empresa",
 ];
 
 function aNumero(valor: unknown): number {
@@ -159,6 +163,8 @@ export interface FacturaOpex {
    *  fila (no solo el valor por defecto actual) para que el historial sea fiel incluso
    *  si el tipo de cambio por defecto cambia más adelante. */
   tipoCambio: number | null;
+  /** Empresa de la línea de gasto — vacío en facturas registradas antes de este campo. */
+  empresa: string;
 }
 
 /** Extrae "Facturas Opex - App" — si la hoja todavía no existe (nadie ha registrado
@@ -211,6 +217,7 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       registrado: aTexto(fila[COL_FACTURAS_OPEX.registrado]),
       montoSoles: montoSolesNum,
       tipoCambio: tipoCambioNum,
+      empresa: aTexto(fila[COL_FACTURAS_OPEX.empresa]),
     });
   }
   return facturas;

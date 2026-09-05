@@ -99,13 +99,13 @@ export async function POST(request: Request) {
     const hojaExisteConDatos = wbActualizado.Sheets[hojaFacturas]?.["!ref"] != null;
     if (!hojaExisteConDatos) {
       // Hoja recién creada, todavía sin nada — escribe el encabezado.
-      await escribirFila(config, archivo, hojaFacturas, 1, "A", "N", ENCABEZADOS_FACTURAS_OPEX);
+      await escribirFila(config, archivo, hojaFacturas, 1, "A", "O", ENCABEZADOS_FACTURAS_OPEX);
     }
 
     // 3) Agrega la factura al final de esa hoja.
     const ultimaFila = ultimaFilaConDatosEscaneada(wbActualizado, hojaFacturas);
     const filaNueva = Math.max(ultimaFila, 1) + 1;
-    await escribirFila(config, archivo, hojaFacturas, filaNueva, "A", "N", [
+    await escribirFila(config, archivo, hojaFacturas, filaNueva, "A", "O", [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
       linea.prioridad,
@@ -120,6 +120,7 @@ export async function POST(request: Request) {
       "ok",
       montoSoles,
       tipoCambio,
+      linea.subNegocio,
     ]);
 
     // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en Presupuesto 2026.

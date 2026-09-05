@@ -339,9 +339,10 @@ export default function FacturasOpex() {
           <h3 className="font-semibold">Últimas facturas registradas</h3>
         </div>
         <div className="overflow-x-auto p-4">
-          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1200 }}>
+          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1330 }}>
             <colgroup>
               <col style={{ width: 100 }} />
+              <col style={{ width: 130 }} />
               <col style={{ width: 220 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 130 }} />
@@ -353,6 +354,7 @@ export default function FacturasOpex() {
             <thead>
               <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
                 <th className="py-2 pr-3">Fecha</th>
+                <th className="py-2 pr-3">Empresa</th>
                 <th className="py-2 pr-3">Línea de Gasto</th>
                 <th className="py-2 pr-3">Mes</th>
                 <th className="py-2 pr-3">Proveedor</th>
@@ -367,6 +369,9 @@ export default function FacturasOpex() {
                 <tr key={f.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
                   <td className="py-1.5 pr-3 text-xs" style={{ color: "var(--texto-suave)" }}>
                     {f.fecha}
+                  </td>
+                  <td className="py-1.5 pr-3 truncate text-xs" style={{ color: "var(--texto-suave)" }} title={f.empresa}>
+                    {f.empresa || "—"}
                   </td>
                   <td className="py-1.5 pr-3 truncate" style={{ color: "var(--texto-suave)" }} title={f.lineaGasto}>
                     {f.lineaGasto}
@@ -416,7 +421,7 @@ export default function FacturasOpex() {
               ))}
               {(datos?.facturas ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-4 text-center text-sm" style={{ color: "var(--texto-suave)" }}>
+                  <td colSpan={9} className="py-4 text-center text-sm" style={{ color: "var(--texto-suave)" }}>
                     Todavía no hay facturas registradas desde la app.
                   </td>
                 </tr>

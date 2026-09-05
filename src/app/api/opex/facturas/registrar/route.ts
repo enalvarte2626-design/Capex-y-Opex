@@ -139,12 +139,12 @@ export async function POST(request: Request) {
     const wbActualizado = leerWorkbook(contenidoActualizado);
     const hojaExisteConDatos = wbActualizado.Sheets[hojaFacturas]?.["!ref"] != null;
     if (!hojaExisteConDatos) {
-      await escribirFila(config, archivo, hojaFacturas, 1, "A", "N", ENCABEZADOS_FACTURAS_OPEX);
+      await escribirFila(config, archivo, hojaFacturas, 1, "A", "O", ENCABEZADOS_FACTURAS_OPEX);
     }
 
     const ultimaFila = ultimaFilaConDatosEscaneada(wbActualizado, hojaFacturas);
     const filaNueva = Math.max(ultimaFila, 1) + 1;
-    await escribirFila(config, archivo, hojaFacturas, filaNueva, "A", "N", [
+    await escribirFila(config, archivo, hojaFacturas, filaNueva, "A", "O", [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
       linea.prioridad,
@@ -159,6 +159,7 @@ export async function POST(request: Request) {
       "ok",
       montoSoles,
       tipoCambio,
+      linea.subNegocio,
     ]);
 
     const colReal = columnaALetra(COL_PPTO_OPEX.primerMesReal + (mes - 1) * 2);
