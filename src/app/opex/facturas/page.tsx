@@ -22,6 +22,11 @@ interface Respuesta {
   actualizadoEn: string;
 }
 
+// Mes calendario real de hoy (1-12) — no el "mes de cierre" que se usa para separar
+// Real de Forecast en los dashboards, sino la fecha real: no se debe poder registrar una
+// factura en un mes que ya pasó.
+const mesActualReal = new Date().getMonth() + 1;
+
 export default function FacturasOpex() {
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -267,11 +272,18 @@ export default function FacturasOpex() {
           <div>
             <label className="etiqueta">Mes (período real del gasto)</label>
             <select className="campo" value={form.mes} onChange={(e) => setForm((p) => ({ ...p, mes: e.target.value }))} required>
-              {NOMBRES_MES_CIERRE.map((nombre, i) => (
-                <option key={nombre} value={i + 1}>
-                  {nombre}
-                </option>
-              ))}
+              {NOMBRES_MES_CIERRE.map((nombre, i) => {
+                const mes = i + 1;
+                // No se permite registrar en un mes ya pasado — evita sumar por error al
+                // Gasto Real de un mes que ya se dio por cerrado. El servidor valida lo
+                // mismo (nunca confía solo en que el navegador oculte la opción).
+                if (mes < mesActualReal) return null;
+                return (
+                  <option key={nombre} value={mes}>
+                    {nombre}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <div>

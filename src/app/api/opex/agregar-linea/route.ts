@@ -60,6 +60,15 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
+  // No se permite registrar en un mes que ya pasó — evita sumar por error al Gasto Real
+  // de un mes ya cerrado. Nunca se confía solo en que el formulario oculte esa opción.
+  const mesActualReal = new Date().getMonth() + 1;
+  if (mes < mesActualReal) {
+    return NextResponse.json(
+      { error: "No se puede registrar una factura en un mes que ya pasó. Elige el mes actual o uno futuro." },
+      { status: 400 }
+    );
+  }
   if (!Number.isFinite(montoSoles) || montoSoles <= 0) {
     return NextResponse.json({ error: "El monto en Soles debe ser mayor a 0." }, { status: 400 });
   }
