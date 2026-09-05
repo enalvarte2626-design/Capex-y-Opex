@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TIPO_CAMBIO_POR_DEFECTO } from "./opex-constantes";
 
-/** Tipo de cambio por defecto para la vista en Soles (solo referencia, no viene del Excel). */
-export const TIPO_CAMBIO_POR_DEFECTO = 3.4;
+// Re-exportado tal cual para no romper a nadie que ya importe esto desde acá — el valor
+// real vive en opex-constantes.ts (sin "use client") para que las rutas de API del
+// servidor también puedan importarlo de forma segura. Ver el comentario en ese archivo.
+export { TIPO_CAMBIO_POR_DEFECTO };
 
 const CLAVE_STORAGE = "capex-tipo-cambio";
 

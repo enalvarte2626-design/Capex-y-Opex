@@ -18,7 +18,7 @@ import {
 } from "@/lib/opex-parse";
 import { fechaAExcelSerial, leerWorkbook, ultimaFilaConDatosEscaneada } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
-import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
+import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +113,12 @@ export async function POST(request: Request) {
   }
 
   const tipoCambio = TIPO_CAMBIO_POR_DEFECTO;
+  if (!Number.isFinite(tipoCambio) || tipoCambio <= 0) {
+    // No debería pasar nunca (es una constante fija), pero si algún día vuelve a
+    // resolverse mal en el bundle del servidor, mejor fallar fuerte acá que guardar un
+    // Monto (USD) en null/0 sin que nadie se entere.
+    return NextResponse.json({ error: "Tipo de cambio inválido en el servidor." }, { status: 500 });
+  }
   const monto = Math.round((montoSoles / tipoCambio) * 100) / 100;
 
   try {

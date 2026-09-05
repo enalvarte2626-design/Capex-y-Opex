@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import type { ProyectoCapex } from "./capex";
+import { TIPO_CAMBIO_POR_DEFECTO } from "./opex-constantes";
 
 /**
  * Índices de columna (0-based) de "Presupuesto 2026" — el equivalente a BD_CAPEX para
@@ -181,6 +182,18 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
     const mesTxt = fila[COL_FACTURAS_OPEX.mes];
     const montoSolesTxt = fila[COL_FACTURAS_OPEX.montoSoles];
     const tipoCambioTxt = fila[COL_FACTURAS_OPEX.tipoCambio];
+    const montoSolesNum = montoSolesTxt !== "" && montoSolesTxt != null ? aNumero(montoSolesTxt) : null;
+    const tipoCambioNum = tipoCambioTxt !== "" && tipoCambioTxt != null ? aNumero(tipoCambioTxt) : null;
+
+    // Respaldo para filas con Monto (USD) en 0 pero con Soles sin IGV sí guardado — pasó
+    // con las primeras facturas registradas mientras un bug dejaba esa celda en blanco
+    // (ver comentario en opex-constantes.ts). Nunca se sobrescribe el Excel con esto:
+    // es solo para que la persona vea el dólar correcto en pantalla mientras corrige o
+    // vuelve a guardar esa fila.
+    let monto = aNumero(fila[COL_FACTURAS_OPEX.monto]);
+    if (monto === 0 && montoSolesNum && montoSolesNum > 0) {
+      monto = Math.round((montoSolesNum / (tipoCambioNum || TIPO_CAMBIO_POR_DEFECTO)) * 100) / 100;
+    }
 
     facturas.push({
       filaExcel: i + 1,
@@ -190,14 +203,14 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       lineaGasto,
       filaPresupuesto: filaPresupuestoTxt ? Number(filaPresupuestoTxt) : null,
       mes: mesTxt ? Number(mesTxt) : null,
-      monto: aNumero(fila[COL_FACTURAS_OPEX.monto]),
+      monto,
       proveedor,
       numeroComprobante: aTexto(fila[COL_FACTURAS_OPEX.numeroComprobante]),
       responsable: aTexto(fila[COL_FACTURAS_OPEX.responsable]),
       comentario: aTexto(fila[COL_FACTURAS_OPEX.comentario]),
       registrado: aTexto(fila[COL_FACTURAS_OPEX.registrado]),
-      montoSoles: montoSolesTxt !== "" && montoSolesTxt != null ? aNumero(montoSolesTxt) : null,
-      tipoCambio: tipoCambioTxt !== "" && tipoCambioTxt != null ? aNumero(tipoCambioTxt) : null,
+      montoSoles: montoSolesNum,
+      tipoCambio: tipoCambioNum,
     });
   }
   return facturas;
