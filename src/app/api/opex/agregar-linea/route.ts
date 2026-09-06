@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   ErrorSharePoint,
+  agregarFilaTabla,
+  asegurarTablaEnHoja,
   camposFaltantesOpex,
   crearHojaSiNoExiste,
   descargarContenido,
@@ -11,7 +13,7 @@ import {
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
 import { COL_PPTO_OPEX, ENCABEZADOS_FACTURAS_OPEX, extraerPresupuestoOpex } from "@/lib/opex-parse";
-import { fechaAExcelSerial, leerWorkbook, ultimaFilaConDatosEscaneada } from "@/lib/capex-parse";
+import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
@@ -107,10 +109,12 @@ export async function POST(request: Request) {
       await escribirFila(config, archivo, hojaFacturas, 1, "A", "O", ENCABEZADOS_FACTURAS_OPEX);
     }
 
-    // 3) Agrega la factura al final de esa hoja.
-    const ultimaFila = ultimaFilaConDatosEscaneada(wbActualizado, hojaFacturas);
-    const filaNueva = Math.max(ultimaFila, 1) + 1;
-    await escribirFila(config, archivo, hojaFacturas, filaNueva, "A", "O", [
+    // 3) Agrega la factura al final de esa hoja — vía la Tabla de Excel de la hoja (no
+    // calculando nosotros "última fila + 1"), para no pisar otra factura que se haya
+    // registrado casi al mismo tiempo. Ver el comentario de `agregarFilaTabla` en
+    // sharepoint.ts.
+    await asegurarTablaEnHoja(config, archivo, hojaFacturas, "A1:O1");
+    await agregarFilaTabla(config, archivo, hojaFacturas, [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
       linea.prioridad,
@@ -132,7 +136,6 @@ export async function POST(request: Request) {
     if (esMesPasado) {
       return NextResponse.json({
         ok: true,
-        filaFactura: filaNueva,
         monto,
         montoSoles,
         tipoCambio,
@@ -150,7 +153,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      filaFactura: filaNueva,
       monto,
       montoSoles,
       tipoCambio,

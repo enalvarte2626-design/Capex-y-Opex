@@ -322,6 +322,89 @@ export async function crearHojaSiNoExiste(
   });
 }
 
+/** Id de la primera tabla de Excel definida en una hoja, o null si no tiene ninguna. */
+async function idPrimeraTablaDeHoja(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  hoja: string
+): Promise<string | null> {
+  const res = await graphFetch(
+    config,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
+      hoja
+    )}')/tables?$select=id`
+  );
+  const datos = await res.json();
+  const tablas: Array<{ id: string }> = datos.value ?? [];
+  return tablas[0]?.id ?? null;
+}
+
+/**
+ * Asegura que la hoja tenga una Tabla de Excel real cubriendo el encabezado indicado
+ * (ej. "A1:O1") — la crea solo si todavía no existe ninguna. Necesario antes de poder
+ * usar `agregarFilaTabla`, que depende de que exista una tabla para agregar filas de
+ * forma atómica (ver comentario en esa función).
+ */
+export async function asegurarTablaEnHoja(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  hoja: string,
+  rangoEncabezado: string
+): Promise<void> {
+  const idExistente = await idPrimeraTablaDeHoja(config, archivo, hoja);
+  if (idExistente) return;
+  await graphFetch(
+    config,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
+      hoja
+    )}')/tables/add`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: rangoEncabezado, hasHeaders: true }),
+    }
+  );
+}
+
+/**
+ * Agrega una fila al FINAL de la tabla de Excel de una hoja — usando el endpoint nativo
+ * `tables/{id}/rows/add` de Graph en vez de calcular nosotros mismos "cuál es la última
+ * fila con datos" y escribir ahí con `escribirFila`.
+ *
+ * Por qué: calcular la última fila nosotros (descargar el archivo entero, escanear,
+ * sumar 1) tiene una condición de carrera real — si dos facturas se registran seguidas
+ * (aunque sea con pocos segundos de diferencia, por la latencia de guardado/replicación
+ * de SharePoint), ambas pueden leer el mismo "última fila" y la segunda escritura
+ * termina PISANDO a la primera en la misma celda, sin ningún error visible: la app
+ * responde "factura registrada" para ambas, pero solo una queda en el Excel. Esto es
+ * justo lo que le pasó al usuario con una factura que el mensaje de éxito confirmó pero
+ * que luego no aparecía en la lista. El endpoint de Tablas de Excel resuelve "agregar al
+ * final" del lado del servidor de Graph, sin que nosotros tengamos que adivinar el
+ * número de fila — así se elimina esa ventana de carrera.
+ */
+export async function agregarFilaTabla(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  hoja: string,
+  valores: Array<string | number>
+): Promise<void> {
+  const idTabla = await idPrimeraTablaDeHoja(config, archivo, hoja);
+  if (!idTabla) {
+    throw new ErrorSharePoint(
+      `La hoja "${hoja}" no tiene ninguna Tabla de Excel definida — hace falta llamar a asegurarTablaEnHoja primero.`
+    );
+  }
+  await graphFetch(
+    config,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${idTabla}')/rows/add`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ values: [valores] }),
+    }
+  );
+}
+
 /**
  * Escribe una columna completa de fórmulas/valores de una sola vez (un solo rango,
  * una sola llamada) — para el cierre de mes, donde hay que ajustar la fórmula de

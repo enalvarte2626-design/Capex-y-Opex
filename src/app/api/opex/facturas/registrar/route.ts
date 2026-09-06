@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import {
   ErrorSharePoint,
+  agregarFilaTabla,
+  asegurarTablaEnHoja,
   camposFaltantesOpex,
   crearHojaSiNoExiste,
   descargarContenido,
@@ -16,7 +18,7 @@ import {
   extraerFacturasOpex,
   extraerPresupuestoOpex,
 } from "@/lib/opex-parse";
-import { fechaAExcelSerial, leerWorkbook, ultimaFilaConDatosEscaneada } from "@/lib/capex-parse";
+import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
@@ -146,10 +148,12 @@ export async function POST(request: Request) {
     if (!hojaExisteConDatos) {
       await escribirFila(config, archivo, hojaFacturas, 1, "A", "O", ENCABEZADOS_FACTURAS_OPEX);
     }
-
-    const ultimaFila = ultimaFilaConDatosEscaneada(wbActualizado, hojaFacturas);
-    const filaNueva = Math.max(ultimaFila, 1) + 1;
-    await escribirFila(config, archivo, hojaFacturas, filaNueva, "A", "O", [
+    // Asegura que la hoja tenga una Tabla de Excel real antes de agregar la fila — ver
+    // el comentario de `agregarFilaTabla` en sharepoint.ts sobre por qué esto reemplaza
+    // el cálculo manual de "última fila + 1" (tenía una condición de carrera real: dos
+    // facturas registradas seguidas podían pisarse entre sí en la misma fila).
+    await asegurarTablaEnHoja(config, archivo, hojaFacturas, "A1:O1");
+    await agregarFilaTabla(config, archivo, hojaFacturas, [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
       linea.prioridad,
@@ -171,7 +175,6 @@ export async function POST(request: Request) {
     if (esMesPasado) {
       return NextResponse.json({
         ok: true,
-        filaFactura: filaNueva,
         monto,
         montoSoles,
         tipoCambio,
@@ -188,7 +191,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      filaFactura: filaNueva,
       monto,
       montoSoles,
       tipoCambio,
