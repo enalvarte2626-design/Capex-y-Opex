@@ -165,7 +165,7 @@ export async function POST(request: Request) {
     // el comentario de `agregarFilaTabla` en sharepoint.ts sobre por qué esto reemplaza
     // el cálculo manual de "última fila + 1" (tenía una condición de carrera real: dos
     // facturas registradas seguidas podían pisarse entre sí en la misma fila).
-    await asegurarTablaEnHoja(config, archivo, hojaFacturas, "A1:P1");
+    await asegurarTablaEnHoja(config, archivo, hojaFacturas, ENCABEZADOS_FACTURAS_OPEX);
     await agregarFilaTabla(config, archivo, hojaFacturas, [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,

@@ -125,7 +125,7 @@ export async function POST(request: Request) {
     // calculando nosotros "última fila + 1"), para no pisar otra factura que se haya
     // registrado casi al mismo tiempo. Ver el comentario de `agregarFilaTabla` en
     // sharepoint.ts.
-    await asegurarTablaEnHoja(config, archivo, hojaFacturas, "A1:P1");
+    await asegurarTablaEnHoja(config, archivo, hojaFacturas, ENCABEZADOS_FACTURAS_OPEX);
     await agregarFilaTabla(config, archivo, hojaFacturas, [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
