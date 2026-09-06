@@ -324,9 +324,9 @@ export async function crearHojaSiNoExiste(
 
 /**
  * Id + dirección (ej. "Hoja1!A1:O5") de la primera tabla de Excel de una hoja, o null.
- * `address` no es una propiedad directa de WorkbookTable — hay que pedirla expandiendo
- * su sub-recurso `range` (`$expand=range($select=address)`), no con `$select=address`
- * a secas (eso da 400: "Could not find a property named 'address'...").
+ * `address` no es una propiedad de WorkbookTable ni se puede traer con `$expand=range`
+ * (esa ruta tampoco es expandible en esta versión de Graph — ambas dan 400). Hay que
+ * pedirla aparte, con una llamada directa a `tables('{id}')/range`.
  */
 async function primeraTablaDeHoja(
   config: ConfiguracionSharePoint,
@@ -335,15 +335,19 @@ async function primeraTablaDeHoja(
 ): Promise<{ id: string; address: string } | null> {
   const res = await graphFetch(
     config,
-    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
-      hoja
-    )}')/tables?$select=id&$expand=range($select=address)`
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(hoja)}')/tables?$select=id`
   );
   const datos = await res.json();
-  const tablas: Array<{ id: string; range?: { address: string } }> = datos.value ?? [];
+  const tablas: Array<{ id: string }> = datos.value ?? [];
   const primera = tablas[0];
   if (!primera) return null;
-  return { id: primera.id, address: primera.range?.address ?? "" };
+
+  const resRango = await graphFetch(
+    config,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${primera.id}')/range?$select=address`
+  );
+  const rango = await resRango.json();
+  return { id: primera.id, address: rango.address ?? "" };
 }
 
 /** "A" → 0, "B" → 1, ... "AA" → 26, igual que columnaALetra pero al revés. */
