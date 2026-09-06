@@ -404,12 +404,14 @@ export async function asegurarTablaEnHoja(
 
   // Ensancha manteniendo el mismo inicio y todas las filas que ya tenga la tabla —
   // resize() exige que el nuevo rango se solape con el actual y conserve el encabezado.
+  // Es una ACCIÓN de Graph (como rows/add), no una propiedad: va con POST, no PATCH —
+  // con PATCH da 400 "Resource not found for the segment 'resize'".
   const nuevaDireccion = `${rangoActual.colInicio}${rangoActual.filaInicio}:${rangoDeseado.colFin}${rangoActual.filaFin}`;
   await graphFetch(
     config,
     `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${existente.id}')/resize`,
     {
-      method: "PATCH",
+      method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ address: nuevaDireccion }),
     }
