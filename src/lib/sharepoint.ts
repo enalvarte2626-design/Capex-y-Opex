@@ -322,7 +322,12 @@ export async function crearHojaSiNoExiste(
   });
 }
 
-/** Id + dirección (ej. "Hoja1!A1:O5") de la primera tabla de Excel de una hoja, o null. */
+/**
+ * Id + dirección (ej. "Hoja1!A1:O5") de la primera tabla de Excel de una hoja, o null.
+ * `address` no es una propiedad directa de WorkbookTable — hay que pedirla expandiendo
+ * su sub-recurso `range` (`$expand=range($select=address)`), no con `$select=address`
+ * a secas (eso da 400: "Could not find a property named 'address'...").
+ */
 async function primeraTablaDeHoja(
   config: ConfiguracionSharePoint,
   archivo: ArchivoResuelto,
@@ -332,11 +337,13 @@ async function primeraTablaDeHoja(
     config,
     `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
       hoja
-    )}')/tables?$select=id,address`
+    )}')/tables?$select=id&$expand=range($select=address)`
   );
   const datos = await res.json();
-  const tablas: Array<{ id: string; address: string }> = datos.value ?? [];
-  return tablas[0] ?? null;
+  const tablas: Array<{ id: string; range?: { address: string } }> = datos.value ?? [];
+  const primera = tablas[0];
+  if (!primera) return null;
+  return { id: primera.id, address: primera.range?.address ?? "" };
 }
 
 /** "A" → 0, "B" → 1, ... "AA" → 26, igual que columnaALetra pero al revés. */
