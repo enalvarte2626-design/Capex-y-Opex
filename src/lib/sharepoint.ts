@@ -322,28 +322,46 @@ export async function crearHojaSiNoExiste(
   });
 }
 
-/** Id de la primera tabla de Excel definida en una hoja, o null si no tiene ninguna. */
-async function idPrimeraTablaDeHoja(
+/** Id + dirección (ej. "Hoja1!A1:O5") de la primera tabla de Excel de una hoja, o null. */
+async function primeraTablaDeHoja(
   config: ConfiguracionSharePoint,
   archivo: ArchivoResuelto,
   hoja: string
-): Promise<string | null> {
+): Promise<{ id: string; address: string } | null> {
   const res = await graphFetch(
     config,
     `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
       hoja
-    )}')/tables?$select=id`
+    )}')/tables?$select=id,address`
   );
   const datos = await res.json();
-  const tablas: Array<{ id: string }> = datos.value ?? [];
-  return tablas[0]?.id ?? null;
+  const tablas: Array<{ id: string; address: string }> = datos.value ?? [];
+  return tablas[0] ?? null;
+}
+
+/** "A" → 0, "B" → 1, ... "AA" → 26, igual que columnaALetra pero al revés. */
+function letraAColumna(letra: string): number {
+  let n = 0;
+  for (const c of letra) n = n * 26 + (c.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+/** Parsea una dirección tipo "'Hoja 1'!A1:O5" o "Hoja1!A1:O5" → sus 4 partes. */
+function parsearRango(direccion: string): { colInicio: string; filaInicio: number; colFin: string; filaFin: number } | null {
+  const sinHoja = direccion.includes("!") ? direccion.slice(direccion.lastIndexOf("!") + 1) : direccion;
+  const m = sinHoja.match(/^([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+  if (!m) return null;
+  return { colInicio: m[1], filaInicio: Number(m[2]), colFin: m[3], filaFin: Number(m[4]) };
 }
 
 /**
- * Asegura que la hoja tenga una Tabla de Excel real cubriendo el encabezado indicado
- * (ej. "A1:O1") — la crea solo si todavía no existe ninguna. Necesario antes de poder
- * usar `agregarFilaTabla`, que depende de que exista una tabla para agregar filas de
- * forma atómica (ver comentario en esa función).
+ * Asegura que la hoja tenga una Tabla de Excel real cubriendo AL MENOS el encabezado
+ * indicado (ej. "A1:P1") — la crea si todavía no existe ninguna, y si ya existe pero es
+ * más angosta (porque se agregó una columna nueva al esquema después de crearla, como
+ * pasó con "Empresa" y luego "Moneda ingresada"), la ENSANCHA con `tables/{id}/resize`
+ * para que incluya las columnas nuevas. Sin este ensanche, `agregarFilaTabla` falla con
+ * "Microsoft Graph respondió 400: El número de filas o columnas... no coincide" en
+ * cuanto se agrega una columna al esquema sin que la tabla ya creada en el Excel se entere.
  */
 export async function asegurarTablaEnHoja(
   config: ConfiguracionSharePoint,
@@ -351,17 +369,38 @@ export async function asegurarTablaEnHoja(
   hoja: string,
   rangoEncabezado: string
 ): Promise<void> {
-  const idExistente = await idPrimeraTablaDeHoja(config, archivo, hoja);
-  if (idExistente) return;
+  const existente = await primeraTablaDeHoja(config, archivo, hoja);
+  if (!existente) {
+    await graphFetch(
+      config,
+      `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
+        hoja
+      )}')/tables/add`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: rangoEncabezado, hasHeaders: true }),
+      }
+    );
+    return;
+  }
+
+  const rangoDeseado = parsearRango(rangoEncabezado);
+  const rangoActual = parsearRango(existente.address);
+  if (!rangoDeseado || !rangoActual) return; // no debería pasar; si pasa, sigue con la tabla tal cual está
+
+  if (letraAColumna(rangoActual.colFin) >= letraAColumna(rangoDeseado.colFin)) return; // ya es suficientemente ancha
+
+  // Ensancha manteniendo el mismo inicio y todas las filas que ya tenga la tabla —
+  // resize() exige que el nuevo rango se solape con el actual y conserve el encabezado.
+  const nuevaDireccion = `${rangoActual.colInicio}${rangoActual.filaInicio}:${rangoDeseado.colFin}${rangoActual.filaFin}`;
   await graphFetch(
     config,
-    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(
-      hoja
-    )}')/tables/add`,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${existente.id}')/resize`,
     {
-      method: "POST",
+      method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address: rangoEncabezado, hasHeaders: true }),
+      body: JSON.stringify({ address: nuevaDireccion }),
     }
   );
 }
@@ -388,15 +427,15 @@ export async function agregarFilaTabla(
   hoja: string,
   valores: Array<string | number>
 ): Promise<void> {
-  const idTabla = await idPrimeraTablaDeHoja(config, archivo, hoja);
-  if (!idTabla) {
+  const tabla = await primeraTablaDeHoja(config, archivo, hoja);
+  if (!tabla) {
     throw new ErrorSharePoint(
       `La hoja "${hoja}" no tiene ninguna Tabla de Excel definida — hace falta llamar a asegurarTablaEnHoja primero.`
     );
   }
   await graphFetch(
     config,
-    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${idTabla}')/rows/add`,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${tabla.id}')/rows/add`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
