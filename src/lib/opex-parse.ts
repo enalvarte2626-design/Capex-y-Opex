@@ -45,9 +45,10 @@ export const COL_FACTURAS_OPEX = {
   responsable: 9,
   comentario: 10,
   registrado: 11,
-  montoSoles: 12, // Monto en Soles sin IGV — lo que realmente ingresa la persona
+  montoSoles: 12, // Monto en Soles sin IGV — solo cuando la factura se ingresó en Soles
   tipoCambio: 13, // Tipo de cambio usado para convertir esta factura en particular
   empresa: 14, // Empresa de la línea de gasto elegida (viene de Presupuesto 2026)
+  moneda: 15, // "PEN" o "USD" — en qué moneda se ingresó originalmente el monto
 } as const;
 
 export const ENCABEZADOS_FACTURAS_OPEX = [
@@ -66,6 +67,7 @@ export const ENCABEZADOS_FACTURAS_OPEX = [
   "Monto Soles (sin IGV)",
   "Tipo de Cambio",
   "Empresa",
+  "Moneda ingresada",
 ];
 
 function aNumero(valor: unknown): number {
@@ -165,6 +167,10 @@ export interface FacturaOpex {
   tipoCambio: number | null;
   /** Empresa de la línea de gasto — vacío en facturas registradas antes de este campo. */
   empresa: string;
+  /** "PEN" o "USD": en qué moneda ingresó la persona el monto — vacío en facturas
+   *  registradas antes de que existiera el selector de moneda (esas siempre fueron en
+   *  Soles, es la única moneda que aceptaba el formulario en ese momento). */
+  moneda: "PEN" | "USD" | "";
 }
 
 /** Extrae "Facturas Opex - App" — si la hoja todavía no existe (nadie ha registrado
@@ -218,6 +224,7 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       montoSoles: montoSolesNum,
       tipoCambio: tipoCambioNum,
       empresa: aTexto(fila[COL_FACTURAS_OPEX.empresa]),
+      moneda: (aTexto(fila[COL_FACTURAS_OPEX.moneda]) as "PEN" | "USD" | ""),
     });
   }
   return facturas;

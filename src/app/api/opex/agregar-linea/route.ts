@@ -22,10 +22,11 @@ export const dynamic = "force-dynamic";
 interface CuerpoRegistro {
   filaPresupuesto: number;
   mes: number; // 1-12
-  /** Monto en Soles SIN IGV que ingresa la persona — el USD que de verdad mueve el
-   *  presupuesto se calcula acá abajo (montoSoles / TIPO_CAMBIO_POR_DEFECTO), nunca se
-   *  recibe directo del formulario. */
-  montoSoles: number;
+  /** En qué moneda ingresó la persona `monto` — "PEN" (Soles sin IGV, se convierte acá
+   *  a USD) o "USD" (ya viene en dólares, se usa tal cual). */
+  moneda: "PEN" | "USD";
+  /** El valor tal cual lo escribió la persona, en la moneda indicada por `moneda`. */
+  monto: number;
   proveedor: string;
   numeroComprobante: string;
   comentario?: string;
@@ -39,10 +40,11 @@ interface CuerpoRegistro {
  * Real del mes correspondiente sin reemplazar lo que ya hubiera (una línea puede tener
  * varias facturas en el mismo mes).
  *
- * El monto se ingresa en Soles SIN IGV (así llegan la mayoría de las facturas locales) y
- * se convierte acá a USD con el tipo de cambio fijo de la app (`TIPO_CAMBIO_POR_DEFECTO`,
- * hoy 3.4) — ese USD es el que de verdad se suma al Gasto Real; nunca se confía en un
- * monto en USD calculado del lado del navegador.
+ * El monto se puede ingresar en Soles SIN IGV (así llegan la mayoría de las facturas
+ * locales) o directo en Dólares (para proveedores extranjeros que ya facturan en USD).
+ * Cuando es en Soles, se convierte acá a USD con el tipo de cambio fijo de la app
+ * (`TIPO_CAMBIO_POR_DEFECTO`, hoy 3.4) — ese USD es el que de verdad se suma al Gasto
+ * Real; nunca se confía en un monto en USD calculado del lado del navegador.
  */
 export async function POST(request: Request) {
   const config = obtenerConfiguracionOpex();
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
   const cuerpo = (await request.json().catch(() => null)) as CuerpoRegistro | null;
   if (!cuerpo) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
 
-  const { filaPresupuesto, mes, montoSoles, proveedor, numeroComprobante, comentario } = cuerpo;
+  const { filaPresupuesto, mes, moneda, monto: montoIngresado, proveedor, numeroComprobante, comentario } = cuerpo;
 
   if (!Number.isInteger(filaPresupuesto) || filaPresupuesto < 2) {
     return NextResponse.json({ error: "Línea de gasto inválida." }, { status: 400 });
@@ -67,8 +69,14 @@ export async function POST(request: Request) {
   // por cerrado para ese mes. Solo el mes actual o uno futuro mueven el presupuesto.
   const mesActualReal = new Date().getMonth() + 1;
   const esMesPasado = mes < mesActualReal;
-  if (!Number.isFinite(montoSoles) || montoSoles <= 0) {
-    return NextResponse.json({ error: "El monto en Soles debe ser mayor a 0." }, { status: 400 });
+  if (moneda !== "PEN" && moneda !== "USD") {
+    return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
+  }
+  if (!Number.isFinite(montoIngresado) || montoIngresado <= 0) {
+    return NextResponse.json(
+      { error: moneda === "PEN" ? "El monto en Soles debe ser mayor a 0." : "El monto en dólares debe ser mayor a 0." },
+      { status: 400 }
+    );
   }
   if (!proveedor?.trim()) {
     return NextResponse.json({ error: "Falta el Proveedor." }, { status: 400 });
@@ -83,7 +91,11 @@ export async function POST(request: Request) {
     // Monto (USD) en null/0 sin que nadie se entere.
     return NextResponse.json({ error: "Tipo de cambio inválido en el servidor." }, { status: 500 });
   }
-  const monto = Math.round((montoSoles / tipoCambio) * 100) / 100;
+  // El USD es siempre lo que de verdad mueve el Gasto Real. Si la persona ya ingresó en
+  // dólares, se usa tal cual (sin dividir de nuevo por el tipo de cambio); el "Monto
+  // Soles (sin IGV)" solo se guarda cuando la factura de verdad se originó en Soles.
+  const monto = moneda === "USD" ? Math.round(montoIngresado * 100) / 100 : Math.round((montoIngresado / tipoCambio) * 100) / 100;
+  const montoSoles = moneda === "PEN" ? montoIngresado : null;
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
@@ -106,14 +118,14 @@ export async function POST(request: Request) {
     const hojaExisteConDatos = wbActualizado.Sheets[hojaFacturas]?.["!ref"] != null;
     if (!hojaExisteConDatos) {
       // Hoja recién creada, todavía sin nada — escribe el encabezado.
-      await escribirFila(config, archivo, hojaFacturas, 1, "A", "O", ENCABEZADOS_FACTURAS_OPEX);
+      await escribirFila(config, archivo, hojaFacturas, 1, "A", "P", ENCABEZADOS_FACTURAS_OPEX);
     }
 
     // 3) Agrega la factura al final de esa hoja — vía la Tabla de Excel de la hoja (no
     // calculando nosotros "última fila + 1"), para no pisar otra factura que se haya
     // registrado casi al mismo tiempo. Ver el comentario de `agregarFilaTabla` en
     // sharepoint.ts.
-    await asegurarTablaEnHoja(config, archivo, hojaFacturas, "A1:O1");
+    await asegurarTablaEnHoja(config, archivo, hojaFacturas, "A1:P1");
     await agregarFilaTabla(config, archivo, hojaFacturas, [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
@@ -127,9 +139,10 @@ export async function POST(request: Request) {
       linea.responsable,
       comentario?.trim() ?? "",
       esMesPasado ? "ok (mes pasado, no afecta presupuesto)" : "ok",
-      montoSoles,
+      montoSoles ?? "",
       tipoCambio,
       linea.subNegocio,
+      moneda,
     ]);
 
     // Un mes pasado queda solo en el historial — nunca toca Presupuesto 2026.

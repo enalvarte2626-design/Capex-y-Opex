@@ -38,10 +38,10 @@ export default function FacturasOpex() {
 
   const [form, setForm] = useState({
     mes: String(new Date().getMonth() + 1),
-    // Se ingresa en Soles SIN IGV — el equivalente en USD que de verdad mueve el
-    // presupuesto se calcula solo, con el tipo de cambio fijo de la app, y nunca se
-    // pide directo: así toda factura queda convertida con el mismo criterio.
-    montoSoles: "",
+    // Por defecto en Soles SIN IGV (así llegan la mayoría de las facturas locales) — se
+    // puede cambiar a Dólares para proveedores que ya facturan en USD directo.
+    moneda: "PEN" as "PEN" | "USD",
+    monto: "",
     proveedor: "",
     numeroComprobante: "",
     comentario: "",
@@ -50,13 +50,15 @@ export default function FacturasOpex() {
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   // Solo para mostrar el equivalente en pantalla mientras se escribe — el backend hace
-  // su propio cálculo con el mismo tipo de cambio, así que esto es únicamente una
-  // vista previa, nunca lo que de verdad se guarda.
-  const montoSolesNum = Number(form.montoSoles);
+  // su propio cálculo con el mismo tipo de cambio, así que esto es únicamente una vista
+  // previa, nunca lo que de verdad se guarda. Si ya se ingresó en USD, el "equivalente"
+  // que se muestra es el de Soles (al revés que cuando se ingresa en Soles).
+  const montoNum = Number(form.monto);
+  const hayMontoValido = Number.isFinite(montoNum) && montoNum > 0;
   const montoUsdPrevio =
-    Number.isFinite(montoSolesNum) && montoSolesNum > 0
-      ? Math.round((montoSolesNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100
-      : null;
+    form.moneda === "PEN" && hayMontoValido ? Math.round((montoNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100 : null;
+  const montoSolesPrevio =
+    form.moneda === "USD" && hayMontoValido ? Math.round(montoNum * TIPO_CAMBIO_POR_DEFECTO * 100) / 100 : null;
 
   function actualizarFacturaLocal(filaExcel: number, cambios: Partial<FacturaOpex>) {
     setDatos((prev) =>
@@ -127,9 +129,12 @@ export default function FacturasOpex() {
       setMensaje({ tipo: "error", texto: "Elige una línea de gasto." });
       return;
     }
-    const montoSoles = Number(form.montoSoles);
-    if (!Number.isFinite(montoSoles) || montoSoles <= 0) {
-      setMensaje({ tipo: "error", texto: "El monto en Soles debe ser mayor a 0." });
+    const monto = Number(form.monto);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setMensaje({
+        tipo: "error",
+        texto: form.moneda === "PEN" ? "El monto en Soles debe ser mayor a 0." : "El monto en dólares debe ser mayor a 0.",
+      });
       return;
     }
     if (!form.proveedor.trim()) {
@@ -138,10 +143,14 @@ export default function FacturasOpex() {
     }
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
-    const montoUsd = Math.round((montoSoles / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+    const montoUsd = form.moneda === "USD" ? monto : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
     const esMesPasado = Number(form.mes) < mesActualReal;
+    const descripcionMonto =
+      form.moneda === "PEN"
+        ? `S/ ${monto.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO}`
+        : `${moneda2(monto)}`;
     const confirmado = window.confirm(
-      `¿Registrar factura de S/ ${montoSoles.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO} — para "${lineaElegida.lineaGasto}", período ${mesTexto}? ` +
+      `¿Registrar factura de ${descripcionMonto} para "${lineaElegida.lineaGasto}", período ${mesTexto}? ` +
         (esMesPasado
           ? `${mesTexto} ya pasó: esto NO va a sumar al Gasto Real de Presupuesto 2026, solo queda en el historial.`
           : `Esto suma ${moneda2(montoUsd)} al Gasto Real de ${mesTexto} en Presupuesto 2026.`)
@@ -157,7 +166,8 @@ export default function FacturasOpex() {
         body: JSON.stringify({
           filaPresupuesto: lineaElegida.filaExcel,
           mes: Number(form.mes),
-          montoSoles,
+          moneda: form.moneda,
+          monto,
           proveedor: form.proveedor,
           numeroComprobante: form.numeroComprobante,
           comentario: form.comentario || undefined,
@@ -171,7 +181,7 @@ export default function FacturasOpex() {
           ? `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`
           : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? "No se modificó el Presupuesto 2026."}`,
       });
-      setForm((prev) => ({ ...prev, montoSoles: "", numeroComprobante: "", comentario: "" }));
+      setForm((prev) => ({ ...prev, monto: "", numeroComprobante: "", comentario: "" }));
       await cargar();
     } catch (e) {
       setMensaje({ tipo: "error", texto: (e as Error).message });
@@ -292,19 +302,36 @@ export default function FacturasOpex() {
             )}
           </div>
           <div>
-            <label className="etiqueta">Monto en Soles (sin IGV)</label>
+            <label className="etiqueta">Moneda</label>
+            <select
+              className="campo"
+              value={form.moneda}
+              onChange={(e) => setForm((p) => ({ ...p, moneda: e.target.value as "PEN" | "USD" }))}
+            >
+              <option value="PEN">Soles (sin IGV)</option>
+              <option value="USD">Dólares (USD)</option>
+            </select>
+          </div>
+          <div>
+            <label className="etiqueta">{form.moneda === "PEN" ? "Monto en Soles (sin IGV)" : "Monto en Dólares (USD)"}</label>
             <input
               type="number"
               step="0.01"
               min="0"
               className="campo"
-              value={form.montoSoles}
-              onChange={(e) => setForm((p) => ({ ...p, montoSoles: e.target.value }))}
+              value={form.monto}
+              onChange={(e) => setForm((p) => ({ ...p, monto: e.target.value }))}
               required
             />
             {montoUsdPrevio != null && (
               <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
                 ≈ {moneda2(montoUsdPrevio)} al tipo de cambio {TIPO_CAMBIO_POR_DEFECTO}
+              </p>
+            )}
+            {montoSolesPrevio != null && (
+              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+                ≈ S/ {montoSolesPrevio.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} al tipo de
+                cambio {TIPO_CAMBIO_POR_DEFECTO}
               </p>
             )}
           </div>
