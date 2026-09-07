@@ -9,9 +9,18 @@ import {
   obtenerConfiguracionSharePoint,
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
-import { COL_BD, extraerProyectos, fechaAExcelSerial, leerWorkbook, ultimaFilaConDatosEscaneada } from "@/lib/capex-parse";
+import {
+  COL_BD,
+  ENCABEZADOS_NUEVOS_FACTURAS,
+  extraerProyectos,
+  fechaAExcelSerial,
+  leerCeldaCruda,
+  leerWorkbook,
+  ultimaFilaConDatosEscaneada,
+} from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
 import { NOMBRES_MES_CIERRE } from "@/lib/capex";
+import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +29,10 @@ const HOJA_FACTURAS = "Control de Facturas-Capex 25fEB";
 interface CuerpoRegistro {
   filaProyecto: number;
   mes: number; // 1-12
+  /** En qué moneda ingresó la persona `monto` — "PEN" (sin IGV, se convierte acá a USD
+   *  con el tipo de cambio fijo de la app) o "USD" (ya viene en dólares, se usa tal cual). */
+  moneda: "PEN" | "USD";
+  /** El valor tal cual lo escribió la persona, en la moneda indicada por `moneda`. */
   monto: number;
   recurso: string;
   proveedor: string;
@@ -27,6 +40,8 @@ interface CuerpoRegistro {
   numeroFactura: string;
   periodoFacturado: string; // "aaaa-mm-dd"
   comentarioExtra?: string;
+  /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
+  ruc?: string;
 }
 
 export async function POST(request: Request) {
@@ -42,8 +57,19 @@ export async function POST(request: Request) {
   const cuerpo = (await request.json().catch(() => null)) as CuerpoRegistro | null;
   if (!cuerpo) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
 
-  const { filaProyecto, mes, monto, recurso, proveedor, responsable, numeroFactura, periodoFacturado, comentarioExtra } =
-    cuerpo;
+  const {
+    filaProyecto,
+    mes,
+    moneda,
+    monto: montoIngresado,
+    recurso,
+    proveedor,
+    responsable,
+    numeroFactura,
+    periodoFacturado,
+    comentarioExtra,
+    ruc,
+  } = cuerpo;
 
   if (!Number.isInteger(filaProyecto) || filaProyecto < 2) {
     return NextResponse.json({ error: "Proyecto inválido." }, { status: 400 });
@@ -51,13 +77,26 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
-  if (!Number.isFinite(monto) || monto <= 0) {
-    return NextResponse.json({ error: "El monto debe ser mayor a 0." }, { status: 400 });
+  if (moneda !== "PEN" && moneda !== "USD") {
+    return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
+  }
+  if (!Number.isFinite(montoIngresado) || montoIngresado <= 0) {
+    return NextResponse.json(
+      { error: moneda === "PEN" ? "El monto en Soles debe ser mayor a 0." : "El monto en dólares debe ser mayor a 0." },
+      { status: 400 }
+    );
   }
   const fecha = new Date(periodoFacturado);
   if (Number.isNaN(fecha.getTime())) {
     return NextResponse.json({ error: "Periodo facturado inválido." }, { status: 400 });
   }
+
+  const tipoCambio = TIPO_CAMBIO_POR_DEFECTO;
+  // El USD es siempre lo que de verdad mueve el Gasto Real. Si ya se ingresó en dólares,
+  // se usa tal cual; "Monto Soles (sin IGV)" solo se guarda cuando la factura de verdad
+  // se originó en Soles — mismo criterio que ya usa OPEX.
+  const monto = moneda === "USD" ? Math.round(montoIngresado * 100) / 100 : Math.round((montoIngresado / tipoCambio) * 100) / 100;
+  const montoSoles = moneda === "PEN" ? montoIngresado : null;
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
@@ -73,11 +112,18 @@ export async function POST(request: Request) {
     }
     const textoProyecto = proyecto.detalle?.trim() || proyecto.proyecto;
 
-    // 2) Agrega la factura al final de la hoja de facturas.
+    // 2) Si la hoja de facturas todavía no tiene las columnas J-M (Moneda/Monto
+    //    Soles/Tipo de Cambio/RUC), agrega los encabezados una sola vez — nunca corre
+    //    ninguna columna existente.
+    if (!leerCeldaCruda(wb, HOJA_FACTURAS, "J1")) {
+      await escribirFila(config, archivo, HOJA_FACTURAS, 1, "J", "M", ENCABEZADOS_NUEVOS_FACTURAS);
+    }
+
+    // 3) Agrega la factura al final de la hoja de facturas.
     const ultimaFila = ultimaFilaConDatosEscaneada(wb, HOJA_FACTURAS);
     const filaNueva = ultimaFila + 1;
     const comentario = `Periodo ${NOMBRES_MES_CIERRE[mes - 1]}${comentarioExtra ? ` — ${comentarioExtra}` : ""}`;
-    await escribirFila(config, archivo, HOJA_FACTURAS, filaNueva, "A", "I", [
+    await escribirFila(config, archivo, HOJA_FACTURAS, filaNueva, "A", "M", [
       fechaAExcelSerial(fecha),
       recurso,
       proveedor,
@@ -87,10 +133,14 @@ export async function POST(request: Request) {
       numeroFactura,
       "ok",
       comentario,
+      moneda,
+      montoSoles ?? "",
+      tipoCambio,
+      ruc?.trim() ?? "",
     ]);
 
-    // 3) Suma el monto al Gasto Real del mes correspondiente en BD_CAPEX (no reemplaza:
-    //    un proyecto puede tener varias facturas en el mismo mes).
+    // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en BD_CAPEX (no
+    //    reemplaza: un proyecto puede tener varias facturas en el mismo mes).
     const colReal = columnaALetra(COL_BD.primerMesReal + (mes - 1) * 2);
     const direccionReal = `${colReal}${filaProyecto}`;
     const valorActual = await leerCelda(config, archivo, hojaProyectos, direccionReal);
@@ -100,6 +150,9 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       filaFactura: filaNueva,
+      monto,
+      montoSoles,
+      tipoCambio,
       celdaActualizada: `${hojaProyectos}!${direccionReal}`,
       gastoRealAnterior: valorActual,
       gastoRealNuevo: nuevoValor,

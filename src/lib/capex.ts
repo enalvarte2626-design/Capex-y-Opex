@@ -44,10 +44,29 @@ export interface FacturaCapex {
   proveedor: string;
   responsable: string;
   proyecto: string;
+  /** Monto en USD — el que de verdad mueve el Gasto Real, sin importar en qué moneda se
+   *  haya ingresado la factura (mismo criterio que OPEX). */
   monto: number;
   numeroFactura: string;
   registrado: string;
   comentarios: string;
+  /** "PEN" o "USD": en qué moneda ingresó la persona el monto — vacío en facturas
+   *  registradas antes de que existiera el selector de moneda (esas siempre fueron el
+   *  monto ya en USD, tal como pedía el formulario anterior). */
+  moneda: "PEN" | "USD" | "";
+  /** Equivalente en Soles sin IGV — si la factura se ingresó en Soles, es el valor real
+   *  que escribió la persona; si se ingresó en Dólares, es un cálculo de referencia
+   *  (monto USD × tipoCambio DE ESA FILA) para que el reporte siempre muestre ambas
+   *  monedas. `null` en facturas de antes de este campo. */
+  montoSoles: number | null;
+  /** true si `montoSoles` es un cálculo de referencia (factura ingresada en USD), no el
+   *  valor que la persona realmente escribió. */
+  montoSolesEsCalculado: boolean;
+  /** Tipo de cambio usado para convertir ESTA factura en particular — se guarda por fila
+   *  para que el historial sea fiel aunque el tipo de cambio por defecto cambie después. */
+  tipoCambio: number | null;
+  /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
+  ruc: string;
 }
 
 export const NOMBRES_MES_CIERRE = [

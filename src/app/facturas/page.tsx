@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NOMBRES_MES_CIERRE, type FacturaCapex } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
+import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import CampoEditable from "@/components/CampoEditable";
 
@@ -38,12 +39,19 @@ export default function Facturas() {
   const [form, setForm] = useState({
     filaProyecto: "",
     mes: String(new Date().getMonth() + 1),
+    // Por defecto en Soles SIN IGV (así llegan la mayoría de las facturas locales) — se
+    // puede cambiar a Dólares para proveedores que ya facturan en USD directo. El monto
+    // que de verdad suma al Gasto Real siempre es en USD (ver "moneda" más abajo).
+    moneda: "PEN" as "PEN" | "USD",
     monto: "",
     recurso: "",
     proveedor: "",
     responsable: "",
     numeroFactura: "",
     periodoFacturado: HOY(),
+    // Solo aplica a proveedores peruanos (el RUC es un identificador tributario de Perú)
+    // — se deja vacío sin problema para proveedores extranjeros.
+    ruc: "",
     comentarioExtra: "",
   });
   const [guardando, setGuardando] = useState(false);
@@ -121,6 +129,16 @@ export default function Facturas() {
 
   const proyectoElegido = datos?.proyectos.find((p) => String(p.filaExcel) === form.filaProyecto);
 
+  // Solo para mostrar el equivalente en pantalla mientras se escribe — el backend hace
+  // su propio cálculo con el mismo tipo de cambio, así que esto es únicamente una vista
+  // previa, nunca lo que de verdad se guarda.
+  const montoNum = Number(form.monto);
+  const hayMontoValido = Number.isFinite(montoNum) && montoNum > 0;
+  const montoUsdPrevio =
+    form.moneda === "PEN" && hayMontoValido ? Math.round((montoNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100 : null;
+  const montoSolesPrevio =
+    form.moneda === "USD" && hayMontoValido ? Math.round(montoNum * TIPO_CAMBIO_POR_DEFECTO * 100) / 100 : null;
+
   function actualizarCampo(campo: keyof typeof form, valor: string) {
     setForm((prev) => {
       const siguiente = { ...prev, [campo]: valor };
@@ -141,13 +159,21 @@ export default function Facturas() {
     }
     const monto = Number(form.monto);
     if (!Number.isFinite(monto) || monto <= 0) {
-      setMensaje({ tipo: "error", texto: "El monto debe ser mayor a 0." });
+      setMensaje({
+        tipo: "error",
+        texto: form.moneda === "PEN" ? "El monto en Soles debe ser mayor a 0." : "El monto en dólares debe ser mayor a 0.",
+      });
       return;
     }
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
+    const montoUsd = form.moneda === "USD" ? monto : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+    const descripcionMonto =
+      form.moneda === "PEN"
+        ? `S/ ${monto.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO}`
+        : `${moneda2(monto)}`;
     const confirmado = window.confirm(
-      `¿Registrar factura de ${moneda2(monto)} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? Esto suma ${moneda2(monto)} al Gasto Real de ${mesTexto} en BD_CAPEX y agrega una fila en la hoja de facturas.`
+      `¿Registrar factura de ${descripcionMonto} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? Esto suma ${moneda2(montoUsd)} al Gasto Real de ${mesTexto} en BD_CAPEX y agrega una fila en la hoja de facturas.`
     );
     if (!confirmado) return;
 
@@ -160,22 +186,28 @@ export default function Facturas() {
         body: JSON.stringify({
           filaProyecto: Number(form.filaProyecto),
           mes: Number(form.mes),
+          moneda: form.moneda,
           monto,
           recurso: form.recurso,
           proveedor: form.proveedor,
           responsable: form.responsable,
           numeroFactura: form.numeroFactura,
           periodoFacturado: form.periodoFacturado,
+          ruc: form.ruc || undefined,
           comentarioExtra: form.comentarioExtra || undefined,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se pudo registrar la factura.");
-      setMensaje({ tipo: "ok", texto: `Factura registrada. Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.` });
+      setMensaje({
+        tipo: "ok",
+        texto: `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`,
+      });
       setForm((prev) => ({
         ...prev,
         monto: "",
         numeroFactura: "",
+        ruc: "",
         comentarioExtra: "",
       }));
       await cargar();
@@ -267,7 +299,18 @@ export default function Facturas() {
           </div>
 
           <div>
-            <label className="etiqueta">Monto Final (sin IGV)</label>
+            <label className="etiqueta">Moneda</label>
+            <select
+              className="campo"
+              value={form.moneda}
+              onChange={(e) => actualizarCampo("moneda", e.target.value)}
+            >
+              <option value="PEN">Soles (sin IGV)</option>
+              <option value="USD">Dólares (USD)</option>
+            </select>
+          </div>
+          <div>
+            <label className="etiqueta">{form.moneda === "PEN" ? "Monto en Soles (sin IGV)" : "Monto en Dólares (USD)"}</label>
             <input
               type="number"
               step="0.01"
@@ -277,6 +320,17 @@ export default function Facturas() {
               onChange={(e) => actualizarCampo("monto", e.target.value)}
               required
             />
+            {montoUsdPrevio != null && (
+              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+                ≈ {moneda2(montoUsdPrevio)} al tipo de cambio {TIPO_CAMBIO_POR_DEFECTO}
+              </p>
+            )}
+            {montoSolesPrevio != null && (
+              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+                ≈ S/ {montoSolesPrevio.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} al tipo de
+                cambio {TIPO_CAMBIO_POR_DEFECTO}
+              </p>
+            )}
           </div>
           <div>
             <label className="etiqueta">N° Factura</label>
@@ -286,6 +340,10 @@ export default function Facturas() {
               value={form.numeroFactura}
               onChange={(e) => actualizarCampo("numeroFactura", e.target.value)}
             />
+          </div>
+          <div>
+            <label className="etiqueta">RUC (opcional, solo proveedores peruanos)</label>
+            <input type="text" className="campo" value={form.ruc} onChange={(e) => actualizarCampo("ruc", e.target.value)} />
           </div>
 
           <div>
@@ -355,15 +413,17 @@ export default function Facturas() {
             " Todos los campos de la tabla de abajo son editables directo — se guardan al salir del campo. El Monto solo se puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale de solo lectura, con una nota)."}
         </p>
         <div className="overflow-x-auto p-4">
-          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1200 }}>
+          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1400 }}>
             <colgroup>
               <col style={{ width: 130 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 240 }} />
-              <col style={{ width: 120 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 130 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 220 }} />
             </colgroup>
             <thead>
@@ -373,8 +433,10 @@ export default function Facturas() {
                 <th className="py-2 pr-3 text-xs font-semibold">Empresa</th>
                 <th className="py-2 pr-3 text-xs font-semibold">Responsable</th>
                 <th className="py-2 pr-3 text-xs font-semibold">Proyecto</th>
-                <th className="py-2 pr-3 text-xs font-semibold text-right">Monto</th>
+                <th className="py-2 pr-3 text-xs font-semibold text-right">Monto (USD)</th>
+                <th className="py-2 pr-3 text-xs font-semibold text-right">Soles (sin IGV)</th>
                 <th className="py-2 pr-3 text-xs font-semibold">N° Factura</th>
+                <th className="py-2 pr-3 text-xs font-semibold">RUC</th>
                 <th className="py-2 pr-3 text-xs font-semibold">Comentarios</th>
               </tr>
             </thead>
@@ -431,6 +493,15 @@ export default function Facturas() {
                       soloLectura={!puedeEditar}
                     />
                   </td>
+                  <td
+                    className="py-1.5 pr-3 text-right text-xs"
+                    style={{ color: "var(--texto-suave)" }}
+                    title={f.montoSolesEsCalculado ? "Factura ingresada en Dólares — equivalente en Soles solo de referencia" : undefined}
+                  >
+                    {f.montoSoles != null
+                      ? `${f.montoSolesEsCalculado ? "≈ " : ""}S/ ${f.montoSoles.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${f.tipoCambio ? ` (TC ${f.tipoCambio})` : ""}`
+                      : "—"}
+                  </td>
                   <td className="py-1.5 pr-3">
                     <CampoEditable
                       fila={f.filaExcel}
@@ -440,6 +511,17 @@ export default function Facturas() {
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { numeroFactura: String(v) })}
+                    />
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <CampoEditable
+                      fila={f.filaExcel}
+                      campo="ruc"
+                      tipo="texto"
+                      valor={f.ruc}
+                      endpoint="/api/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
+                      onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { ruc: String(v) })}
                     />
                   </td>
                   <td className="py-1.5 pr-3">

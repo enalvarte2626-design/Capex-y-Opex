@@ -45,8 +45,12 @@ export async function GET() {
       Proveedor: f.recurso || "—",
       "Empresa (código)": f.proveedor || "—",
       Responsable: f.responsable || "—",
-      Monto: f.monto,
+      "Monto (USD)": f.monto,
+      "Monto Soles (sin IGV)": f.montoSoles ?? "—",
+      "Origen Monto Soles": f.montoSoles == null ? "—" : f.montoSolesEsCalculado ? "Calculado" : "Ingresado",
+      "Tipo de Cambio": f.tipoCambio ?? "—",
       "N° Factura": f.numeroFactura || "—",
+      RUC: f.ruc || "—",
       Comentarios: f.comentarios || "—",
       Registrado: f.registrado || "—",
     }));

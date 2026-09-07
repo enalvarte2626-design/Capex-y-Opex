@@ -1,18 +1,33 @@
 import * as XLSX from "xlsx";
 import type { FacturaCapex, ItemConMeses, ProyectoCapex } from "./capex";
+import { TIPO_CAMBIO_POR_DEFECTO } from "./opex-constantes";
 
-/** Índices de columna (0-based) dentro de "Control de Facturas-Capex 25fEB". */
+/**
+ * Índices de columna (0-based) dentro de "Control de Facturas-Capex 25fEB".
+ *
+ * `moneda`, `montoSoles`, `tipoCambio` y `ruc` se agregaron después, mismo criterio que
+ * ya usa OPEX: `monto` (columna F) siempre queda en USD — es lo único que de verdad
+ * suma al Gasto Real — y estas 4 columnas nuevas van al final de la fila para no correr
+ * ninguna columna existente. Las facturas registradas antes de este cambio simplemente
+ * quedan con esas celdas vacías.
+ */
 export const COL_FACTURAS = {
   periodoFacturado: 0, // A
   recurso: 1, // B
   proveedor: 2, // C
   responsable: 3, // D: Resp.
   proyecto: 4, // E
-  monto: 5, // F: Monto Final (sin IGV)
+  monto: 5, // F: Monto Final (sin IGV) — siempre en USD
   numeroFactura: 6, // G: N° Factura
   registrado: 7, // H
   comentarios: 8, // I
+  moneda: 9, // J: "PEN" o "USD" — en qué moneda se ingresó originalmente el monto
+  montoSoles: 10, // K: Monto en Soles sin IGV — solo cuando se ingresó en Soles
+  tipoCambio: 11, // L: Tipo de cambio usado para convertir esta factura en particular
+  ruc: 12, // M: RUC del proveedor (solo aplica a proveedores peruanos) — opcional
 } as const;
+
+export const ENCABEZADOS_NUEVOS_FACTURAS = ["Moneda ingresada", "Monto Soles (sin IGV)", "Tipo de Cambio", "RUC"];
 
 /** Índices de columna (0-based) dentro de BD_CAPEX, según el layout confirmado del archivo. */
 export const COL_BD = {
@@ -128,6 +143,24 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
       periodoTexto = aTexto(fechaCruda);
     }
 
+    const montoSolesTxt = fila[COL_FACTURAS.montoSoles];
+    const tipoCambioTxt = fila[COL_FACTURAS.tipoCambio];
+    const montoSolesGuardado = montoSolesTxt !== "" && montoSolesTxt != null ? aNumero(montoSolesTxt) : null;
+    const tipoCambioNum = tipoCambioTxt !== "" && tipoCambioTxt != null ? aNumero(tipoCambioTxt) : null;
+    const monto = aNumero(fila[COL_FACTURAS.monto]);
+
+    // Si la factura se ingresó directo en Dólares (o es de antes de que existiera este
+    // campo), "Monto Soles" queda vacío en el Excel. Para que el reporte y la pantalla
+    // siempre muestren ambas monedas, se calcula acá con el tipo de cambio GUARDADO EN
+    // ESA MISMA FILA (nunca el actual) — así una factura vieja no cambia de valor si el
+    // tipo de cambio por defecto de la app cambia más adelante (hoy 3.4).
+    let montoSoles = montoSolesGuardado;
+    let montoSolesEsCalculado = false;
+    if (montoSoles == null && monto > 0) {
+      montoSoles = Math.round(monto * (tipoCambioNum || TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+      montoSolesEsCalculado = true;
+    }
+
     facturas.push({
       filaExcel: i + 1,
       periodoFacturado: periodoTexto,
@@ -136,10 +169,15 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
       proveedor: aTexto(fila[COL_FACTURAS.proveedor]),
       responsable: aTexto(fila[COL_FACTURAS.responsable]),
       proyecto,
-      monto: aNumero(fila[COL_FACTURAS.monto]),
+      monto,
       numeroFactura,
       registrado: aTexto(fila[COL_FACTURAS.registrado]),
       comentarios: aTexto(fila[COL_FACTURAS.comentarios]),
+      moneda: (aTexto(fila[COL_FACTURAS.moneda]) as "PEN" | "USD" | ""),
+      montoSoles,
+      montoSolesEsCalculado,
+      tipoCambio: tipoCambioNum,
+      ruc: aTexto(fila[COL_FACTURAS.ruc]),
     });
   }
   return facturas;

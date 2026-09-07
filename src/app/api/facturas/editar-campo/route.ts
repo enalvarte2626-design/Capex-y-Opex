@@ -20,6 +20,7 @@ const CAMPOS_TEXTO: Record<string, number> = {
   responsable: COL_FACTURAS.responsable,
   numeroFactura: COL_FACTURAS.numeroFactura,
   comentarios: COL_FACTURAS.comentarios,
+  ruc: COL_FACTURAS.ruc,
 };
 
 export async function POST(request: Request) {
