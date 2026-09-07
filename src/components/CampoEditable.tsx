@@ -19,6 +19,9 @@ interface Props {
    *  guardado y deja el valor como estaba. Para avisar de un efecto colateral (ej. romper
    *  el vínculo con facturas ya registradas) antes de escribir en el Excel. */
   confirmarAntes?: () => boolean;
+  /** true = muestra el valor como texto plano, sin ningún input — para quien entró con
+   *  acceso de solo lectura (nunca debe poder ni intentar editar esta celda). */
+  soloLectura?: boolean;
 }
 
 /**
@@ -39,6 +42,7 @@ export default function CampoEditable({
   placeholder,
   endpoint = "/api/capex/celda",
   confirmarAntes,
+  soloLectura,
 }: Props) {
   const [valorLocal, setValorLocal] = useState(String(valor));
   const [enfocado, setEnfocado] = useState(false);
@@ -91,6 +95,10 @@ export default function CampoEditable({
 
   const esMoneda = tipo === "moneda";
   const valorMostrado = esMoneda && !enfocado ? moneda2(Number(valorLocal) || 0) : valorLocal;
+
+  if (soloLectura) {
+    return <span className={className}>{valorMostrado || "—"}</span>;
+  }
 
   return (
     <div>

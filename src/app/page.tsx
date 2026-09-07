@@ -35,6 +35,7 @@ import {
 import { useMesCierre } from "@/lib/useMesCierre";
 import { useTipoCambio } from "@/lib/useTipoCambio";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import { moneda, moneda2, monedaK, soles, solesK } from "@/lib/format";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
 import MontoSoles from "@/components/MontoSoles";
@@ -101,6 +102,8 @@ interface RespuestaCapex {
 }
 
 export default function DashboardCapex() {
+  const nivelAcceso = useNivelAcceso();
+  const puedeEditar = nivelAcceso === "completo";
   const [datos, setDatos] = useState<RespuestaCapex | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -325,14 +328,16 @@ export default function DashboardCapex() {
               Actualizado {new Date(datos.actualizadoEn).toLocaleString("es-PE")}
             </span>
           )}
-          <button
-            className="boton-secundario"
-            onClick={generarArchivoDeCierre}
-            disabled={generandoCierre || !datos}
-            title="Crea un archivo nuevo en SharePoint para el siguiente mes cerrado (ej. 7+5 → 8+4), igual que ya haces a mano cada mes."
-          >
-            {generandoCierre ? "Generando…" : "Generar archivo de cierre"}
-          </button>
+          {puedeEditar && (
+            <button
+              className="boton-secundario"
+              onClick={generarArchivoDeCierre}
+              disabled={generandoCierre || !datos}
+              title="Crea un archivo nuevo en SharePoint para el siguiente mes cerrado (ej. 7+5 → 8+4), igual que ya haces a mano cada mes."
+            >
+              {generandoCierre ? "Generando…" : "Generar archivo de cierre"}
+            </button>
+          )}
           <button className="boton-primario" onClick={cargar} disabled={cargando}>
             {cargando ? "Actualizando…" : "Actualizar"}
           </button>

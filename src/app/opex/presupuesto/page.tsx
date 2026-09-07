@@ -6,6 +6,7 @@ import { moneda2 } from "@/lib/format";
 import { useMesCierre } from "@/lib/useMesCierre";
 import { useTipoCambio } from "@/lib/useTipoCambio";
 import { usePersistedState } from "@/lib/usePersistedState";
+import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import CampoEditable from "@/components/CampoEditable";
 import CampoMontoSumado from "@/components/CampoMontoSumado";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
@@ -69,6 +70,8 @@ function estiloFijo(clave: (typeof CLAVES_FIJAS)[number], fondo: string): React.
 }
 
 export default function PresupuestoOpex() {
+  const nivelAcceso = useNivelAcceso();
+  const puedeEditar = nivelAcceso === "completo";
   const [lineas, setLineas] = useState<ProyectoCapex[] | null>(null);
   const [archivo, setArchivo] = useState("");
   const [actualizadoEn, setActualizadoEn] = useState("");
@@ -380,7 +383,7 @@ export default function PresupuestoOpex() {
             ))}
           </select>
         </div>
-        {mesCierreServidor != null && mesCierreServidor < 12 && (
+        {puedeEditar && mesCierreServidor != null && mesCierreServidor < 12 && (
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -407,9 +410,11 @@ export default function PresupuestoOpex() {
               Actualizado {new Date(actualizadoEn).toLocaleString("es-PE")}
             </span>
           )}
-          <button className="boton-secundario" onClick={() => setMostrarFormNuevo((v) => !v)}>
-            {mostrarFormNuevo ? "Cancelar" : "+ Agregar línea"}
-          </button>
+          {puedeEditar && (
+            <button className="boton-secundario" onClick={() => setMostrarFormNuevo((v) => !v)}>
+              {mostrarFormNuevo ? "Cancelar" : "+ Agregar línea"}
+            </button>
+          )}
           <button className="boton-primario" onClick={cargar} disabled={cargando}>
             {cargando ? "Actualizando…" : "Actualizar"}
           </button>
@@ -579,12 +584,14 @@ export default function PresupuestoOpex() {
                       tipo="texto"
                       valor={l.responsable}
                       endpoint="/api/opex/celda"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarLocal(l.filaExcel, { responsable: String(v) })}
                     />
                   </td>
                   <td className="py-1.5 px-3">
                     <select
                       className="campo text-xs font-medium"
+                      disabled={!puedeEditar}
                       style={{
                         padding: "0.25rem 0.5rem",
                         width: "100%",
@@ -665,6 +672,7 @@ export default function PresupuestoOpex() {
                               className="text-center text-xs"
                               endpoint="/api/opex/celda"
                               mostrarSoles={mostrarSoles}
+                              soloLectura={!puedeEditar}
                               tipoCambio={tipoCambio}
                               onGuardado={(nuevo) => actualizarLocal(l.filaExcel, { real: l.real.map((x, j) => (j === m.mi ? nuevo : x)) })}
                             />
@@ -676,6 +684,7 @@ export default function PresupuestoOpex() {
                               className="text-center text-xs"
                               endpoint="/api/opex/celda"
                               mostrarSoles={mostrarSoles}
+                              soloLectura={!puedeEditar}
                               tipoCambio={tipoCambio}
                               onGuardado={(nuevo) =>
                                 actualizarLocal(l.filaExcel, { proyectado: l.proyectado.map((x, j) => (j === m.mi ? nuevo : x)) })

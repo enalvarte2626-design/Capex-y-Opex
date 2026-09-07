@@ -16,6 +16,9 @@ interface Props {
    *  las demás columnas de importe) — no afecta el guardado, es solo referencia visual. */
   mostrarSoles?: boolean;
   tipoCambio?: number;
+  /** true = muestra el valor como texto plano, sin ningún input ni botón de suma — para
+   *  quien entró con acceso de solo lectura. */
+  soloLectura?: boolean;
 }
 
 /**
@@ -34,6 +37,7 @@ export default function CampoMontoSumado({
   endpoint = "/api/capex/celda",
   mostrarSoles = false,
   tipoCambio = 1,
+  soloLectura = false,
 }: Props) {
   const [valorLocal, setValorLocal] = useState(String(valor));
   const [enfocado, setEnfocado] = useState(false);
@@ -41,6 +45,19 @@ export default function CampoMontoSumado({
   const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState(false);
   const [lineas, setLineas] = useState<string[]>([]);
+
+  if (soloLectura) {
+    return (
+      <div>
+        <span className={className}>{moneda2(valor)}</span>
+        {mostrarSoles && (
+          <div className="text-[10px] text-center" style={{ color: "var(--texto-suave)" }}>
+            S/ {(valor * tipoCambio).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   useEffect(() => {
     if (!enfocado && !expandido) setValorLocal(String(valor));

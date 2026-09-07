@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NOMBRES_MES_CIERRE, type FacturaCapex } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
+import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import CampoEditable from "@/components/CampoEditable";
 
 interface ProyectoOpcion {
@@ -26,6 +27,8 @@ interface Respuesta {
 const HOY = () => new Date().toISOString().slice(0, 10);
 
 export default function Facturas() {
+  const nivelAcceso = useNivelAcceso();
+  const puedeEditar = nivelAcceso === "completo";
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -209,6 +212,13 @@ export default function Facturas() {
         <h2 className="text-lg font-semibold">Facturas</h2>
       </div>
 
+      {!puedeEditar && (
+        <div className="card p-4 text-sm" style={{ color: "var(--texto-suave)" }}>
+          Estás viendo Facturas en modo de solo lectura — puedes ver la tabla, pero no registrar ni editar facturas.
+        </div>
+      )}
+
+      {puedeEditar && (
       <form onSubmit={registrar} className="card p-4 flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -330,15 +340,19 @@ export default function Facturas() {
           )}
         </div>
       </form>
+      )}
 
       <div className="card p-0 overflow-hidden">
-        <div className="p-4 pb-0">
+        <div className="p-4 pb-0 flex items-center justify-between gap-3 flex-wrap">
           <h3 className="font-semibold">Últimas facturas registradas</h3>
+          <a href="/api/facturas/exportar" className="boton-secundario" download>
+            Descargar reporte (Excel)
+          </a>
         </div>
-        <p className="px-4 text-xs" style={{ color: "var(--texto-suave)" }}>
-          Todos los campos son editables directo en la tabla — se guardan al salir del campo. El Monto solo se
-          puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale
-          de solo lectura, con una nota).
+        <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
+          El Excel descargado viene ordenado por Proyecto.
+          {puedeEditar &&
+            " Todos los campos de la tabla de abajo son editables directo — se guardan al salir del campo. El Monto solo se puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale de solo lectura, con una nota)."}
         </p>
         <div className="overflow-x-auto p-4">
           <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1200 }}>
@@ -371,6 +385,7 @@ export default function Facturas() {
                     <CampoFecha
                       factura={f}
                       onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)}
+                      soloLectura={!puedeEditar}
                     />
                   </td>
                   <td className="py-1.5 pr-3">
@@ -380,6 +395,7 @@ export default function Facturas() {
                       tipo="texto"
                       valor={f.recurso}
                       endpoint="/api/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { recurso: String(v) })}
                     />
                   </td>
@@ -390,6 +406,7 @@ export default function Facturas() {
                       tipo="texto"
                       valor={f.proveedor}
                       endpoint="/api/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { proveedor: String(v) })}
                     />
                   </td>
@@ -400,6 +417,7 @@ export default function Facturas() {
                       tipo="texto"
                       valor={f.responsable}
                       endpoint="/api/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { responsable: String(v) })}
                     />
                   </td>
@@ -407,7 +425,11 @@ export default function Facturas() {
                     {f.proyecto}
                   </td>
                   <td className="py-1.5 pr-3">
-                    <MontoFactura factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} />
+                    <MontoFactura
+                      factura={f}
+                      onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)}
+                      soloLectura={!puedeEditar}
+                    />
                   </td>
                   <td className="py-1.5 pr-3">
                     <CampoEditable
@@ -416,6 +438,7 @@ export default function Facturas() {
                       tipo="texto"
                       valor={f.numeroFactura}
                       endpoint="/api/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { numeroFactura: String(v) })}
                     />
                   </td>
@@ -426,6 +449,7 @@ export default function Facturas() {
                       tipo="texto"
                       valor={f.comentarios}
                       endpoint="/api/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { comentarios: String(v) })}
                     />
                   </td>
@@ -443,15 +467,21 @@ export default function Facturas() {
 function CampoFecha({
   factura,
   onGuardado,
+  soloLectura,
 }: {
   factura: FacturaConResolucion;
   onGuardado: (cambios: Partial<FacturaConResolucion>) => void;
+  soloLectura?: boolean;
 }) {
   const [valor, setValor] = useState(factura.periodoFacturadoISO);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => setValor(factura.periodoFacturadoISO), [factura.periodoFacturadoISO]);
+
+  if (soloLectura) {
+    return <span className="text-xs">{factura.periodoFacturado || "—"}</span>;
+  }
 
   async function guardar() {
     if (!valor || valor === factura.periodoFacturadoISO) return;
@@ -508,9 +538,11 @@ function CampoFecha({
 function MontoFactura({
   factura,
   onGuardado,
+  soloLectura,
 }: {
   factura: FacturaConResolucion;
   onGuardado: (cambios: Partial<FacturaConResolucion>) => void;
+  soloLectura?: boolean;
 }) {
   const [valorLocal, setValorLocal] = useState(String(factura.monto));
   const [enfocado, setEnfocado] = useState(false);
@@ -521,6 +553,10 @@ function MontoFactura({
     if (!enfocado) setValorLocal(String(factura.monto));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [factura.monto]);
+
+  if (soloLectura) {
+    return <span className="text-right block text-xs">{moneda2(factura.monto)}</span>;
+  }
 
   if (!factura.resolucion) {
     return (

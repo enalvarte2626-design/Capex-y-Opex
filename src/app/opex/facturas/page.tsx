@@ -5,6 +5,7 @@ import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
+import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import CampoEditable from "@/components/CampoEditable";
 import type { FacturaOpex } from "@/lib/opex-parse";
 
@@ -24,6 +25,8 @@ interface Respuesta {
 }
 
 export default function FacturasOpex() {
+  const nivelAcceso = useNivelAcceso();
+  const puedeEditar = nivelAcceso === "completo";
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -260,6 +263,14 @@ export default function FacturasOpex() {
         <h2 className="text-lg font-semibold">Facturas OPEX</h2>
       </div>
 
+      {!puedeEditar && (
+        <div className="card p-4 text-sm" style={{ color: "var(--texto-suave)" }}>
+          Estás viendo Facturas en modo de solo lectura — puedes ver y descargar el reporte, pero no registrar ni
+          editar facturas.
+        </div>
+      )}
+
+      {puedeEditar && (
       <form onSubmit={registrar} className="card p-4 flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
@@ -433,6 +444,7 @@ export default function FacturasOpex() {
           )}
         </div>
       </form>
+      )}
 
       <div className="card p-0 overflow-hidden">
         <div className="p-4 pb-0 flex items-center justify-between gap-3 flex-wrap">
@@ -505,11 +517,16 @@ export default function FacturasOpex() {
                       tipo="texto"
                       valor={f.proveedor}
                       endpoint="/api/opex/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { proveedor: String(v) })}
                     />
                   </td>
                   <td className="py-1.5 pr-3">
-                    <MontoFactura factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} />
+                    <MontoFactura
+                      factura={f}
+                      onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)}
+                      soloLectura={!puedeEditar}
+                    />
                   </td>
                   <td
                     className="py-1.5 pr-3 text-right text-xs"
@@ -527,6 +544,7 @@ export default function FacturasOpex() {
                       tipo="texto"
                       valor={f.numeroComprobante}
                       endpoint="/api/opex/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { numeroComprobante: String(v) })}
                     />
                   </td>
@@ -537,6 +555,7 @@ export default function FacturasOpex() {
                       tipo="texto"
                       valor={f.ruc}
                       endpoint="/api/opex/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { ruc: String(v) })}
                     />
                   </td>
@@ -547,6 +566,7 @@ export default function FacturasOpex() {
                       tipo="texto"
                       valor={f.comentario}
                       endpoint="/api/opex/facturas/editar-campo"
+                      soloLectura={!puedeEditar}
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { comentario: String(v) })}
                     />
                   </td>
@@ -571,7 +591,15 @@ export default function FacturasOpex() {
  *  de gasto y mes de forma directa al registrarla (a diferencia de CAPEX, no hace falta
  *  adivinar por texto). Esta edición sigue siendo directo en USD — a propósito no se
  *  tocó, el cambio de Soles/IGV es solo para el registro inicial. */
-function MontoFactura({ factura, onGuardado }: { factura: FacturaOpex; onGuardado: (cambios: Partial<FacturaOpex>) => void }) {
+function MontoFactura({
+  factura,
+  onGuardado,
+  soloLectura,
+}: {
+  factura: FacturaOpex;
+  onGuardado: (cambios: Partial<FacturaOpex>) => void;
+  soloLectura?: boolean;
+}) {
   const [valorLocal, setValorLocal] = useState(String(factura.monto));
   const [enfocado, setEnfocado] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -581,6 +609,10 @@ function MontoFactura({ factura, onGuardado }: { factura: FacturaOpex; onGuardad
     if (!enfocado) setValorLocal(String(factura.monto));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [factura.monto]);
+
+  if (soloLectura) {
+    return <span className="text-right block text-xs">{moneda2(factura.monto)}</span>;
+  }
 
   if (!factura.filaPresupuesto || !factura.mes) {
     return (
