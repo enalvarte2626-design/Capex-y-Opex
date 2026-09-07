@@ -33,8 +33,9 @@ export default function Facturas() {
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [grupoSel, setGrupoSel] = useState("");
   const [proyectoNombreSel, setProyectoNombreSel] = useState("");
-  const [detalleSel, setDetalleSel] = useState("");
+  const [detalleTexto, setDetalleTexto] = useState("");
 
   const [form, setForm] = useState({
     filaProyecto: "",
@@ -115,47 +116,83 @@ export default function Facturas() {
     cargar();
   }, []);
 
+  // Grupos de Negocio disponibles — elegir uno acota tanto el Proyecto como el Detalle
+  // de abajo (opcional: se puede saltar directo a buscar por Proyecto o Detalle).
+  const grupos = useMemo(() => {
+    const set = new Set((datos?.proyectos ?? []).map((p) => p.grupoNegocio).filter(Boolean));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+  }, [datos]);
+
+  const proyectosDelGrupo = useMemo(
+    () => (datos?.proyectos ?? []).filter((p) => !grupoSel || p.grupoNegocio === grupoSel),
+    [datos, grupoSel]
+  );
+
   const nombresProyecto = useMemo(() => {
     const conteo = new Map<string, number>();
-    for (const p of datos?.proyectos ?? []) conteo.set(p.proyecto, (conteo.get(p.proyecto) ?? 0) + 1);
+    for (const p of proyectosDelGrupo) conteo.set(p.proyecto, (conteo.get(p.proyecto) ?? 0) + 1);
     return Array.from(conteo.entries())
       .sort((a, b) => a[0].localeCompare(b[0], "es"))
       .map(([nombre, cantidad]) => ({ nombre, cantidad }));
-  }, [datos]);
+  }, [proyectosDelGrupo]);
 
-  // El desplegable de Detalle se acota solo al Proyecto ya elegido.
-  const detallesDisponibles = useMemo(() => {
-    const lista = (datos?.proyectos ?? []).filter((p) => !proyectoNombreSel || p.proyecto === proyectoNombreSel);
+  // El Detalle se puede buscar directo (sin elegir Proyecto antes): se acota al Grupo
+  // elegido (si hay) y al Proyecto (si ya se eligió uno), pero siempre se puede escribir
+  // parte de un Detalle para encontrarlo entre todos — al elegir uno de la lista,
+  // autocompleta Proyecto (y Grupo) solo.
+  const opcionesDetalle = useMemo(() => {
+    const lista = proyectosDelGrupo.filter((p) => !proyectoNombreSel || p.proyecto === proyectoNombreSel);
     const vistos = new Set<string>();
-    const resultado: { nombre: string; filaExcel: number }[] = [];
+    const resultado: { etiqueta: string; filaExcel: number }[] = [];
     for (const p of lista) {
-      const d = p.detalle.trim() || "(sin detalle)";
-      if (vistos.has(d)) continue;
-      vistos.add(d);
-      resultado.push({ nombre: d, filaExcel: p.filaExcel });
+      const detalle = p.detalle.trim() || "(sin detalle)";
+      const clave = `${p.proyecto}|||${detalle}`;
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
+      // Sin Proyecto elegido todavía, el nombre del Proyecto va junto para no confundir
+      // Detalles iguales de proyectos distintos.
+      resultado.push({ etiqueta: proyectoNombreSel ? detalle : `${detalle} — ${p.proyecto}`, filaExcel: p.filaExcel });
     }
-    return resultado.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-  }, [datos, proyectoNombreSel]);
+    return resultado.sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));
+  }, [proyectosDelGrupo, proyectoNombreSel]);
 
-  // Al cambiar el Proyecto, el Detalle elegido antes puede ya no aplicar.
-  useEffect(() => {
-    setDetalleSel("");
-  }, [proyectoNombreSel]);
+  const proyectoPorEtiquetaDetalle = useMemo(() => {
+    const mapa = new Map<string, ProyectoOpcion>();
+    for (const o of opcionesDetalle) {
+      const p = datos?.proyectos.find((x) => x.filaExcel === o.filaExcel);
+      if (p) mapa.set(o.etiqueta, p);
+    }
+    return mapa;
+  }, [opcionesDetalle, datos]);
 
-  // En cuanto Proyecto + Detalle identifican una sola fila de BD_CAPEX, la deja lista
-  // (y sugiere su Responsable, si el campo aún está vacío).
-  useEffect(() => {
-    if (!detalleSel) return;
-    const opcion = detallesDisponibles.find((d) => d.nombre === detalleSel);
+  function elegirGrupo(valor: string) {
+    setGrupoSel(valor);
+    setProyectoNombreSel("");
+    setDetalleTexto("");
+    setForm((prev) => ({ ...prev, filaProyecto: "" }));
+  }
+
+  function elegirProyecto(valor: string) {
+    setProyectoNombreSel(valor);
+    setDetalleTexto("");
+    setForm((prev) => ({ ...prev, filaProyecto: "" }));
+  }
+
+  // Al elegir (o terminar de escribir) un Detalle que coincide exacto con uno de la
+  // lista, identifica de una sola vez la fila de BD_CAPEX y autocompleta Proyecto y
+  // Grupo — así se puede buscar por Detalle sin tener que elegir Proyecto antes.
+  function elegirDetalle(texto: string) {
+    setDetalleTexto(texto);
+    const opcion = proyectoPorEtiquetaDetalle.get(texto);
     if (!opcion) return;
-    const p = datos?.proyectos.find((x) => x.filaExcel === opcion.filaExcel);
+    setGrupoSel(opcion.grupoNegocio);
+    setProyectoNombreSel(opcion.proyecto);
     setForm((prev) => ({
       ...prev,
       filaProyecto: String(opcion.filaExcel),
-      responsable: prev.responsable || p?.responsable || "",
+      responsable: prev.responsable || opcion.responsable,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detalleSel]);
+  }
 
   const proyectoElegido = datos?.proyectos.find((p) => String(p.filaExcel) === form.filaProyecto);
 
@@ -284,13 +321,20 @@ export default function Facturas() {
       <form onSubmit={registrar} className="card p-4 flex flex-col gap-3">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
+            <label className="etiqueta">Grupo de Negocio (opcional, acota Proyecto/Detalle)</label>
+            <select className="campo" value={grupoSel} onChange={(e) => elegirGrupo(e.target.value)}>
+              <option value="">Todos</option>
+              {grupos.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div />
+          <div>
             <label className="etiqueta">Proyecto</label>
-            <select
-              className="campo"
-              value={proyectoNombreSel}
-              onChange={(e) => setProyectoNombreSel(e.target.value)}
-              required
-            >
+            <select className="campo" value={proyectoNombreSel} onChange={(e) => elegirProyecto(e.target.value)} required>
               <option value="">Selecciona un proyecto…</option>
               {nombresProyecto.map((p) => (
                 <option key={p.nombre} value={p.nombre}>
@@ -300,21 +344,26 @@ export default function Facturas() {
             </select>
           </div>
           <div>
-            <label className="etiqueta">Detalle</label>
-            <select
+            <label className="etiqueta">Detalle (también se puede buscar directo, sin elegir Proyecto antes)</label>
+            <input
+              type="text"
+              list="detalles-capex"
               className="campo"
-              value={detalleSel}
-              onChange={(e) => setDetalleSel(e.target.value)}
-              disabled={!proyectoNombreSel}
+              value={detalleTexto}
+              onChange={(e) => elegirDetalle(e.target.value)}
+              placeholder="Escribe para buscar…"
               required
-            >
-              <option value="">{proyectoNombreSel ? "Selecciona un detalle…" : "Primero elige un proyecto"}</option>
-              {detallesDisponibles.map((d) => (
-                <option key={d.filaExcel} value={d.nombre}>
-                  {d.nombre}
-                </option>
+            />
+            <datalist id="detalles-capex">
+              {opcionesDetalle.map((d) => (
+                <option key={d.filaExcel} value={d.etiqueta} />
               ))}
-            </select>
+            </datalist>
+            {proyectoElegido && (
+              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+                Proyecto: <strong>{proyectoElegido.proyecto}</strong> ({proyectoElegido.grupoNegocio})
+              </p>
+            )}
           </div>
 
           <div>
