@@ -238,11 +238,6 @@ export default function FacturasOpex() {
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold">Facturas OPEX</h2>
-        <p className="text-sm" style={{ color: "var(--texto-suave)" }}>
-          Registra cada factura en Soles (sin IGV) — la app la convierte sola a USD con el tipo de cambio
-          {" "}{TIPO_CAMBIO_POR_DEFECTO} y suma ese monto al Gasto Real del mes que elijas en Presupuesto 2026. La
-          factura queda guardada en &quot;Facturas Opex - App&quot; (se crea sola la primera vez que la uses).
-        </p>
       </div>
 
       <form onSubmit={registrar} className="card p-4 flex flex-col gap-3">

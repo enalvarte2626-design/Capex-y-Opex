@@ -207,10 +207,6 @@ export default function Facturas() {
     <div className="flex flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold">Facturas</h2>
-        <p className="text-sm" style={{ color: "var(--texto-suave)" }}>
-          Registra cada factura de un proyecto — el monto se suma solo al Gasto Real del mes que elijas en
-          BD_CAPEX, y la factura queda guardada en &quot;Control de Facturas-Capex 25fEB&quot;.
-        </p>
       </div>
 
       <form onSubmit={registrar} className="card p-4 flex flex-col gap-3">
