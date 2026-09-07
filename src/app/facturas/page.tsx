@@ -36,6 +36,7 @@ export default function Facturas() {
   const [grupoSel, setGrupoSel] = useState("");
   const [proyectoNombreSel, setProyectoNombreSel] = useState("");
   const [detalleTexto, setDetalleTexto] = useState("");
+  const [mostrarSugerenciasDetalle, setMostrarSugerenciasDetalle] = useState(false);
 
   const [form, setForm] = useState({
     filaProyecto: "",
@@ -138,32 +139,35 @@ export default function Facturas() {
 
   // El Detalle se puede buscar directo (sin elegir Proyecto antes): se acota al Grupo
   // elegido (si hay) y al Proyecto (si ya se eligió uno), pero siempre se puede escribir
-  // parte de un Detalle para encontrarlo entre todos — al elegir uno de la lista,
-  // autocompleta Proyecto (y Grupo) solo.
+  // parte de un Detalle O de un nombre de Proyecto para encontrarlo — al elegir una
+  // sugerencia, autocompleta Proyecto (y Grupo) solo.
   const opcionesDetalle = useMemo(() => {
     const lista = proyectosDelGrupo.filter((p) => !proyectoNombreSel || p.proyecto === proyectoNombreSel);
     const vistos = new Set<string>();
-    const resultado: { etiqueta: string; filaExcel: number }[] = [];
+    const resultado: { etiqueta: string; buscable: string; filaExcel: number }[] = [];
     for (const p of lista) {
       const detalle = p.detalle.trim() || "(sin detalle)";
       const clave = `${p.proyecto}|||${detalle}`;
       if (vistos.has(clave)) continue;
       vistos.add(clave);
-      // Sin Proyecto elegido todavía, el nombre del Proyecto va junto para no confundir
-      // Detalles iguales de proyectos distintos.
-      resultado.push({ etiqueta: proyectoNombreSel ? detalle : `${detalle} — ${p.proyecto}`, filaExcel: p.filaExcel });
+      resultado.push({
+        // Sin Proyecto elegido todavía, el nombre del Proyecto va junto en lo que se
+        // muestra, para no confundir Detalles iguales de proyectos distintos.
+        etiqueta: proyectoNombreSel ? detalle : `${detalle} — ${p.proyecto}`,
+        // Para filtrar mientras se escribe: siempre incluye Detalle y Proyecto, aunque
+        // no se muestren juntos, así buscar por cualquiera de los dos encuentra la fila.
+        buscable: `${detalle} ${p.proyecto}`.toLowerCase(),
+        filaExcel: p.filaExcel,
+      });
     }
     return resultado.sort((a, b) => a.etiqueta.localeCompare(b.etiqueta, "es"));
   }, [proyectosDelGrupo, proyectoNombreSel]);
 
-  const proyectoPorEtiquetaDetalle = useMemo(() => {
-    const mapa = new Map<string, ProyectoOpcion>();
-    for (const o of opcionesDetalle) {
-      const p = datos?.proyectos.find((x) => x.filaExcel === o.filaExcel);
-      if (p) mapa.set(o.etiqueta, p);
-    }
-    return mapa;
-  }, [opcionesDetalle, datos]);
+  const sugerenciasDetalle = useMemo(() => {
+    const texto = detalleTexto.trim().toLowerCase();
+    const lista = texto ? opcionesDetalle.filter((o) => o.buscable.includes(texto)) : opcionesDetalle;
+    return lista.slice(0, 30);
+  }, [opcionesDetalle, detalleTexto]);
 
   function elegirGrupo(valor: string) {
     setGrupoSel(valor);
@@ -178,20 +182,29 @@ export default function Facturas() {
     setForm((prev) => ({ ...prev, filaProyecto: "" }));
   }
 
-  // Al elegir (o terminar de escribir) un Detalle que coincide exacto con uno de la
-  // lista, identifica de una sola vez la fila de BD_CAPEX y autocompleta Proyecto y
-  // Grupo — así se puede buscar por Detalle sin tener que elegir Proyecto antes.
-  function elegirDetalle(texto: string) {
-    setDetalleTexto(texto);
-    const opcion = proyectoPorEtiquetaDetalle.get(texto);
-    if (!opcion) return;
-    setGrupoSel(opcion.grupoNegocio);
-    setProyectoNombreSel(opcion.proyecto);
+  // Al hacer clic en una sugerencia, identifica de una sola vez la fila de BD_CAPEX y
+  // autocompleta Proyecto y Grupo — así se puede buscar por Detalle o por Proyecto sin
+  // tener que elegir nada antes.
+  function elegirSugerenciaDetalle(opcion: { etiqueta: string; filaExcel: number }) {
+    const p = datos?.proyectos.find((x) => x.filaExcel === opcion.filaExcel);
+    if (!p) return;
+    setDetalleTexto(opcion.etiqueta);
+    setMostrarSugerenciasDetalle(false);
+    setGrupoSel(p.grupoNegocio);
+    setProyectoNombreSel(p.proyecto);
     setForm((prev) => ({
       ...prev,
-      filaProyecto: String(opcion.filaExcel),
-      responsable: prev.responsable || opcion.responsable,
+      filaProyecto: String(p.filaExcel),
+      responsable: prev.responsable || p.responsable,
     }));
+  }
+
+  // Escribir invalida la selección anterior (si había) — hay que volver a elegir de la
+  // lista de sugerencias para que quede identificada la fila de BD_CAPEX.
+  function cambiarTextoDetalle(texto: string) {
+    setDetalleTexto(texto);
+    setMostrarSugerenciasDetalle(true);
+    setForm((prev) => (prev.filaProyecto ? { ...prev, filaProyecto: "" } : prev));
   }
 
   const proyectoElegido = datos?.proyectos.find((p) => String(p.filaExcel) === form.filaProyecto);
@@ -343,25 +356,56 @@ export default function Facturas() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="etiqueta">Detalle (también se puede buscar directo, sin elegir Proyecto antes)</label>
+          <div style={{ position: "relative" }}>
+            <label className="etiqueta">Detalle (también se puede buscar por nombre de Proyecto)</label>
             <input
               type="text"
-              list="detalles-capex"
               className="campo"
               value={detalleTexto}
-              onChange={(e) => elegirDetalle(e.target.value)}
+              onChange={(e) => cambiarTextoDetalle(e.target.value)}
+              onFocus={() => setMostrarSugerenciasDetalle(true)}
+              onBlur={() => setTimeout(() => setMostrarSugerenciasDetalle(false), 150)}
               placeholder="Escribe para buscar…"
+              autoComplete="off"
               required
             />
-            <datalist id="detalles-capex">
-              {opcionesDetalle.map((d) => (
-                <option key={d.filaExcel} value={d.etiqueta} />
-              ))}
-            </datalist>
-            {proyectoElegido && (
+            {mostrarSugerenciasDetalle && sugerenciasDetalle.length > 0 && (
+              <ul
+                className="card"
+                style={{
+                  position: "absolute",
+                  zIndex: 20,
+                  top: "100%",
+                  left: 0,
+                  right: 0,
+                  marginTop: 2,
+                  maxHeight: 220,
+                  overflowY: "auto",
+                  padding: "0.25rem 0",
+                }}
+              >
+                {sugerenciasDetalle.map((o) => (
+                  <li key={o.filaExcel}>
+                    <button
+                      type="button"
+                      className="text-xs w-full text-left"
+                      style={{ padding: "0.35rem 0.6rem" }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => elegirSugerenciaDetalle(o)}
+                    >
+                      {o.etiqueta}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {proyectoElegido ? (
               <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
                 Proyecto: <strong>{proyectoElegido.proyecto}</strong> ({proyectoElegido.grupoNegocio})
+              </p>
+            ) : (
+              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+                Elige una sugerencia de la lista para identificar la fila.
               </p>
             )}
           </div>
