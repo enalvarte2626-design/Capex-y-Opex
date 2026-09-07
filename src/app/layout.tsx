@@ -4,8 +4,8 @@ import AppShell from "@/components/AppShell";
 import { APP_PASSWORD_CONFIGURADA } from "@/lib/appAuth";
 
 export const metadata: Metadata = {
-  title: "Dashboard CAPEX",
-  description: "Control de gasto e inversión CAPEX 2026 — Expertia",
+  title: "Control Presupuestal TI",
+  description: "Control de gasto e inversión CAPEX/OPEX 2026 — Expertia",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

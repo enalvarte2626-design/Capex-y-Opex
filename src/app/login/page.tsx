@@ -45,7 +45,7 @@ function FormularioLogin() {
     <div className="min-h-screen flex items-center justify-center px-6" style={{ background: "var(--bg)" }}>
       <div className="card p-10 max-w-sm w-full flex flex-col items-center gap-6 text-center">
         <div>
-          <h1 className="text-xl font-semibold">Dashboard CAPEX</h1>
+          <h1 className="text-xl font-semibold">Control Presupuestal TI</h1>
           <p className="text-sm mt-1" style={{ color: "var(--texto-suave)" }}>
             Ingresa la contraseña para continuar.
           </p>
