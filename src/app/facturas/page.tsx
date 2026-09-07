@@ -117,6 +117,36 @@ export default function Facturas() {
     cargar();
   }, []);
 
+  // Proveedores que ya aparecen en facturas registradas — para sugerirlos en el
+  // desplegable y no tener que volver a tipear el nombre cada mes (mismo criterio que
+  // ya usa OPEX). Se agrupan por nombre normalizado (minúsculas, sin espacios de más)
+  // para que variaciones de escritura del mismo proveedor — "Go daddy", "Go Daddy",
+  // "GO DADDY " — no aparezcan como sugerencias repetidas; de cada grupo se muestra la
+  // forma que más veces se escribió así (o la primera, si hay empate).
+  const proveedoresConocidos = useMemo(() => {
+    const conteoPorClave = new Map<string, Map<string, number>>();
+    for (const f of datos?.facturas ?? []) {
+      const nombre = f.recurso?.trim();
+      if (!nombre) continue;
+      const clave = nombre.toLowerCase().replace(/\s+/g, " ");
+      const formas = conteoPorClave.get(clave) ?? new Map<string, number>();
+      formas.set(nombre, (formas.get(nombre) ?? 0) + 1);
+      conteoPorClave.set(clave, formas);
+    }
+    const nombres = Array.from(conteoPorClave.values()).map((formas) => {
+      let mejor = "";
+      let mejorConteo = -1;
+      for (const [forma, veces] of formas) {
+        if (veces > mejorConteo) {
+          mejor = forma;
+          mejorConteo = veces;
+        }
+      }
+      return mejor;
+    });
+    return nombres.sort((a, b) => a.localeCompare(b, "es"));
+  }, [datos]);
+
   // Grupos de Negocio disponibles — elegir uno acota tanto el Proyecto como el Detalle
   // de abajo (opcional: se puede saltar directo a buscar por Proyecto o Detalle).
   const grupos = useMemo(() => {
@@ -475,7 +505,19 @@ export default function Facturas() {
 
           <div>
             <label className="etiqueta">Proveedor</label>
-            <input type="text" className="campo" value={form.recurso} onChange={(e) => actualizarCampo("recurso", e.target.value)} />
+            <input
+              type="text"
+              list="proveedores-capex"
+              className="campo"
+              value={form.recurso}
+              onChange={(e) => actualizarCampo("recurso", e.target.value)}
+              placeholder="Elige uno ya usado o escribe uno nuevo"
+            />
+            <datalist id="proveedores-capex">
+              {proveedoresConocidos.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label className="etiqueta">Empresa (código)</label>
