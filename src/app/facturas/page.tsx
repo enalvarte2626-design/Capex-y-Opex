@@ -5,6 +5,7 @@ import { NOMBRES_MES_CIERRE, type FacturaCapex } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
+import { agruparProveedores } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
 
 interface ProyectoOpcion {
@@ -118,34 +119,14 @@ export default function Facturas() {
   }, []);
 
   // Proveedores que ya aparecen en facturas registradas — para sugerirlos en el
-  // desplegable y no tener que volver a tipear el nombre cada mes (mismo criterio que
-  // ya usa OPEX). Se agrupan por nombre normalizado (minúsculas, sin espacios de más)
-  // para que variaciones de escritura del mismo proveedor — "Go daddy", "Go Daddy",
-  // "GO DADDY " — no aparezcan como sugerencias repetidas; de cada grupo se muestra la
-  // forma que más veces se escribió así (o la primera, si hay empate).
-  const proveedoresConocidos = useMemo(() => {
-    const conteoPorClave = new Map<string, Map<string, number>>();
-    for (const f of datos?.facturas ?? []) {
-      const nombre = f.recurso?.trim();
-      if (!nombre) continue;
-      const clave = nombre.toLowerCase().replace(/\s+/g, " ");
-      const formas = conteoPorClave.get(clave) ?? new Map<string, number>();
-      formas.set(nombre, (formas.get(nombre) ?? 0) + 1);
-      conteoPorClave.set(clave, formas);
-    }
-    const nombres = Array.from(conteoPorClave.values()).map((formas) => {
-      let mejor = "";
-      let mejorConteo = -1;
-      for (const [forma, veces] of formas) {
-        if (veces > mejorConteo) {
-          mejor = forma;
-          mejorConteo = veces;
-        }
-      }
-      return mejor;
-    });
-    return nombres.sort((a, b) => a.localeCompare(b, "es"));
-  }, [datos]);
+  // desplegable y no tener que volver a tipear el nombre cada mes. `agruparProveedores`
+  // junta variaciones de escritura del mismo proveedor: mayúsculas/espacios distintos
+  // ("Go daddy" = "Go Daddy") y también razón social con/sin sufijo ("Metrica" =
+  // "Metrica Sac") — ver el comentario en lib/proveedores.ts para el criterio exacto.
+  const proveedoresConocidos = useMemo(
+    () => agruparProveedores((datos?.facturas ?? []).map((f) => f.recurso)),
+    [datos]
+  );
 
   // Grupos de Negocio disponibles — elegir uno acota tanto el Proyecto como el Detalle
   // de abajo (opcional: se puede saltar directo a buscar por Proyecto o Detalle).
