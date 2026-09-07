@@ -51,27 +51,6 @@ export default function FacturasOpex() {
   });
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
-  const [rellenandoRuc, setRellenandoRuc] = useState(false);
-  const [mensajeRuc, setMensajeRuc] = useState<string | null>(null);
-
-  // Completa el RUC de facturas ya registradas cuyo proveedor es peruano y conocido (ver
-  // backfill-ruc/route.ts) — un botón de un solo uso, no algo que haga falta correr
-  // seguido: las facturas nuevas ya piden el RUC directo en el formulario.
-  async function rellenarRucConocidos() {
-    setRellenandoRuc(true);
-    setMensajeRuc(null);
-    try {
-      const res = await fetch("/api/opex/facturas/backfill-ruc", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "No se pudo completar el RUC.");
-      setMensajeRuc(json.mensaje);
-      if (json.actualizadas?.length > 0) await cargar();
-    } catch (e) {
-      setMensajeRuc((e as Error).message);
-    } finally {
-      setRellenandoRuc(false);
-    }
-  }
 
   // Solo para mostrar el equivalente en pantalla mientras se escribe — el backend hace
   // su propio cálculo con el mismo tipo de cambio, así que esto es únicamente una vista
@@ -108,6 +87,14 @@ export default function FacturasOpex() {
   useEffect(() => {
     cargar();
   }, []);
+
+  // Proveedores que ya aparecen en facturas registradas — para sugerirlos en el
+  // desplegable y no tener que volver a tipear el nombre cada mes. Crece solo conforme
+  // se van registrando facturas con proveedores nuevos.
+  const proveedoresConocidos = useMemo(
+    () => Array.from(new Set((datos?.facturas ?? []).map((f) => f.proveedor).filter(Boolean))).sort((a, b) => a.localeCompare(b, "es")),
+    [datos]
+  );
 
   const empresas = useMemo(() => Array.from(new Set((datos?.lineas ?? []).map((l) => l.empresa).filter(Boolean))).sort(), [datos]);
 
@@ -359,11 +346,18 @@ export default function FacturasOpex() {
             <label className="etiqueta">Proveedor</label>
             <input
               type="text"
+              list="proveedores-conocidos"
               className="campo"
               value={form.proveedor}
               onChange={(e) => setForm((p) => ({ ...p, proveedor: e.target.value }))}
+              placeholder="Elige uno ya usado o escribe uno nuevo"
               required
             />
+            <datalist id="proveedores-conocidos">
+              {proveedoresConocidos.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
           </div>
 
           <div>
@@ -410,26 +404,10 @@ export default function FacturasOpex() {
       <div className="card p-0 overflow-hidden">
         <div className="p-4 pb-0 flex items-center justify-between gap-3 flex-wrap">
           <h3 className="font-semibold">Últimas facturas registradas</h3>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={rellenarRucConocidos}
-              disabled={rellenandoRuc}
-              title="Completa el RUC de facturas ya registradas cuyo proveedor es peruano y conocido"
-            >
-              {rellenandoRuc ? "Buscando…" : "Completar RUC conocidos"}
-            </button>
-            <a href="/api/opex/facturas/exportar" className="boton-secundario" download>
-              Descargar reporte (Excel)
-            </a>
-          </div>
+          <a href="/api/opex/facturas/exportar" className="boton-secundario" download>
+            Descargar reporte (Excel)
+          </a>
         </div>
-        {mensajeRuc && (
-          <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
-            {mensajeRuc}
-          </p>
-        )}
         <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
           El Excel descargado trae todas las columnas completas y viene ordenado por Línea de Gasto — la tabla de
           abajo muestra las más recientes primero.
