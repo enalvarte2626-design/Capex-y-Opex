@@ -169,9 +169,16 @@ export interface FacturaOpex {
   responsable: string;
   comentario: string;
   registrado: string;
-  /** Monto original en Soles sin IGV que ingresó la persona — null en facturas
-   *  registradas antes de este campo (esas solo tienen `monto` en USD). */
+  /** Equivalente en Soles sin IGV — si la factura se ingresó en Soles, es el valor que
+   *  de verdad escribió la persona; si se ingresó en Dólares, es un cálculo de
+   *  referencia (monto USD × tipoCambio DE ESA FILA, nunca el tipo de cambio actual) para
+   *  que el reporte siempre muestre ambas monedas sin importar en cuál se registró.
+   *  `null` solo en facturas de antes de que existiera este campo, sin tipoCambio
+   *  guardado con qué calcularlo. */
   montoSoles: number | null;
+  /** true si `montoSoles` es un cálculo de referencia (factura ingresada en USD),
+   *  no el valor que la persona realmente escribió. */
+  montoSolesEsCalculado: boolean;
   /** Tipo de cambio usado para convertir ESTA factura en particular — se guarda por
    *  fila (no solo el valor por defecto actual) para que el historial sea fiel incluso
    *  si el tipo de cambio por defecto cambia más adelante. */
@@ -230,6 +237,19 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       monto = Math.round((montoSolesNum / (tipoCambioNum || TIPO_CAMBIO_POR_DEFECTO)) * 100) / 100;
     }
 
+    // Si la factura se ingresó directo en Dólares, "Monto Soles" queda vacío en el Excel
+    // (nunca se inventó un valor al registrarla). Para que el reporte y la pantalla
+    // siempre muestren las dos monedas sin importar en cuál se registró, se calcula acá
+    // — usando el tipo de cambio GUARDADO EN ESA MISMA FILA, nunca el actual: así, si el
+    // tipo de cambio por defecto de la app cambia más adelante (hoy 3.4), las facturas
+    // viejas siguen mostrando el valor correcto con el que de verdad se registraron.
+    let montoSoles = montoSolesNum;
+    let montoSolesEsCalculado = false;
+    if (montoSoles == null && monto > 0) {
+      montoSoles = Math.round(monto * (tipoCambioNum || TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+      montoSolesEsCalculado = true;
+    }
+
     facturas.push({
       filaExcel: i + 1,
       fecha,
@@ -244,7 +264,8 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       responsable: aTexto(fila[COL_FACTURAS_OPEX.responsable]),
       comentario: aTexto(fila[COL_FACTURAS_OPEX.comentario]),
       registrado: aTexto(fila[COL_FACTURAS_OPEX.registrado]),
-      montoSoles: montoSolesNum,
+      montoSoles,
+      montoSolesEsCalculado,
       tipoCambio: tipoCambioNum,
       empresa: aTexto(fila[COL_FACTURAS_OPEX.empresa]),
       moneda: (aTexto(fila[COL_FACTURAS_OPEX.moneda]) as "PEN" | "USD" | ""),

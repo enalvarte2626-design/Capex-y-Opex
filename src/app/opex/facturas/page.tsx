@@ -502,9 +502,13 @@ export default function FacturasOpex() {
                   <td className="py-1.5 pr-3">
                     <MontoFactura factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} />
                   </td>
-                  <td className="py-1.5 pr-3 text-right text-xs" style={{ color: "var(--texto-suave)" }}>
+                  <td
+                    className="py-1.5 pr-3 text-right text-xs"
+                    style={{ color: "var(--texto-suave)" }}
+                    title={f.montoSolesEsCalculado ? "Factura ingresada en Dólares — equivalente en Soles solo de referencia" : undefined}
+                  >
                     {f.montoSoles != null
-                      ? `S/ ${f.montoSoles.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${f.tipoCambio ? ` (TC ${f.tipoCambio})` : ""}`
+                      ? `${f.montoSolesEsCalculado ? "≈ " : ""}S/ ${f.montoSoles.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${f.tipoCambio ? ` (TC ${f.tipoCambio})` : ""}`
                       : "—"}
                   </td>
                   <td className="py-1.5 pr-3">

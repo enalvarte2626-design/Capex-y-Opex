@@ -54,6 +54,7 @@ export async function GET() {
       "N° Comprobante": f.numeroComprobante || "—",
       Moneda: f.moneda === "PEN" ? "Soles" : f.moneda === "USD" ? "Dólares" : "—",
       "Monto Soles (sin IGV)": f.montoSoles ?? "",
+      "Origen Monto Soles": f.montoSoles == null ? "—" : f.montoSolesEsCalculado ? "Calculado (ref.)" : "Ingresado",
       "Tipo de Cambio": f.tipoCambio ?? "",
       "Monto (USD)": f.monto,
       Comentario: f.comentario || "—",
