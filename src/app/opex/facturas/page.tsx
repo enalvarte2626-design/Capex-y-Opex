@@ -457,18 +457,18 @@ export default function FacturasOpex() {
             </colgroup>
             <thead>
               <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
-                <th className="py-2 pr-3">Fecha</th>
-                <th className="py-2 pr-3">Empresa</th>
-                <th className="py-2 pr-3">Grupo de Gasto</th>
-                <th className="py-2 pr-3">Subgrupo de Gasto</th>
-                <th className="py-2 pr-3">Línea de Gasto</th>
-                <th className="py-2 pr-3">Mes</th>
-                <th className="py-2 pr-3">Proveedor</th>
-                <th className="py-2 pr-3 text-right">Monto (USD)</th>
-                <th className="py-2 pr-3 text-right">Soles (sin IGV)</th>
-                <th className="py-2 pr-3">N° Comprobante</th>
-                <th className="py-2 pr-3">RUC</th>
-                <th className="py-2 pr-3">Comentario</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Fecha</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Empresa</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Grupo de Gasto</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Subgrupo de Gasto</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Línea de Gasto</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Mes</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Proveedor</th>
+                <th className="py-2 pr-3 text-xs font-semibold text-right">Monto (USD)</th>
+                <th className="py-2 pr-3 text-xs font-semibold text-right">Soles (sin IGV)</th>
+                <th className="py-2 pr-3 text-xs font-semibold">N° Comprobante</th>
+                <th className="py-2 pr-3 text-xs font-semibold">RUC</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Comentario</th>
               </tr>
             </thead>
             <tbody>

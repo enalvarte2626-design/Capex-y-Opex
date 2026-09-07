@@ -358,14 +358,14 @@ export default function Facturas() {
             </colgroup>
             <thead>
               <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
-                <th className="py-2 pr-3">Periodo facturado</th>
-                <th className="py-2 pr-3">Proveedor</th>
-                <th className="py-2 pr-3">Empresa</th>
-                <th className="py-2 pr-3">Responsable</th>
-                <th className="py-2 pr-3">Proyecto</th>
-                <th className="py-2 pr-3 text-right">Monto</th>
-                <th className="py-2 pr-3">N° Factura</th>
-                <th className="py-2 pr-3">Comentarios</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Periodo facturado</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Proveedor</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Empresa</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Responsable</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Proyecto</th>
+                <th className="py-2 pr-3 text-xs font-semibold text-right">Monto</th>
+                <th className="py-2 pr-3 text-xs font-semibold">N° Factura</th>
+                <th className="py-2 pr-3 text-xs font-semibold">Comentarios</th>
               </tr>
             </thead>
             <tbody>
