@@ -14,6 +14,15 @@ export const dynamic = "force-dynamic";
 
 const HOJA_FACTURAS = "Control de Facturas-Capex 25fEB";
 
+/** El comentario siempre trae "Periodo {Mes}" (se arma así al registrar la factura, ver
+ *  /api/facturas/registrar) — se extrae directo de ahí para el reporte, sin depender de
+ *  que `resolverFacturaABDCapex` pueda identificar la fila exacta de BD_CAPEX (el "Mes al
+ *  que pertenece el gasto" puede ser distinto a la fecha de emisión del comprobante). */
+function mesPresupuestalDeComentario(comentarios: string): string {
+  const match = comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
+  return match ? match[1] : "—";
+}
+
 /**
  * Descarga el reporte de facturas CAPEX como un .xlsx real, ordenado por proyecto (línea
  * presupuestal) — mismo criterio que el reporte de OPEX (/api/opex/facturas/exportar).
@@ -40,7 +49,8 @@ export async function GET() {
     const ordenadas = [...facturas].sort((a, b) => a.proyecto.localeCompare(b.proyecto, "es"));
 
     const filas = ordenadas.map((f) => ({
-      "Periodo Facturado": f.periodoFacturado || "—",
+      "Fecha Emisión": f.periodoFacturado || "—",
+      "Mes Presupuestal": mesPresupuestalDeComentario(f.comentarios),
       Proyecto: f.proyecto || "—",
       Proveedor: f.recurso || "—",
       "Empresa (código)": f.proveedor || "—",

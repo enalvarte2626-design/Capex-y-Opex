@@ -27,6 +27,14 @@ interface Respuesta {
 
 const HOY = () => new Date().toISOString().slice(0, 10);
 
+/** El comentario siempre trae "Periodo {Mes}" (se arma así al registrar la factura) —
+ *  se usa como respaldo para mostrar el Mes presupuestal aunque `resolucion` no haya
+ *  podido identificar la fila exacta de BD_CAPEX (proyecto con nombre ambiguo, etc.). */
+function mesPresupuestalDeComentario(comentarios: string): string {
+  const match = comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
+  return match ? match[1] : "—";
+}
+
 export default function Facturas() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
@@ -288,7 +296,7 @@ export default function Facturas() {
           </div>
 
           <div>
-            <label className="etiqueta">Mes (período real del gasto)</label>
+            <label className="etiqueta">Mes al que pertenece el gasto (carga aquí al presupuesto)</label>
             <select className="campo" value={form.mes} onChange={(e) => actualizarCampo("mes", e.target.value)} required>
               {NOMBRES_MES_CIERRE.map((nombre, i) => (
                 <option key={nombre} value={i + 1}>
@@ -296,6 +304,10 @@ export default function Facturas() {
                 </option>
               ))}
             </select>
+            <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+              Puede ser distinto a la fecha de emisión del comprobante — ej. una factura
+              emitida en agosto por un servicio de julio va aquí en Julio.
+            </p>
           </div>
 
           <div>
@@ -365,7 +377,7 @@ export default function Facturas() {
             />
           </div>
           <div>
-            <label className="etiqueta">Periodo facturado (fecha de la factura)</label>
+            <label className="etiqueta">Fecha de emisión del comprobante</label>
             <input
               type="date"
               className="campo"
@@ -415,7 +427,8 @@ export default function Facturas() {
         <div className="overflow-x-auto p-4">
           <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1400 }}>
             <colgroup>
-              <col style={{ width: 130 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 90 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 130 }} />
@@ -428,7 +441,8 @@ export default function Facturas() {
             </colgroup>
             <thead>
               <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
-                <th className="py-2 pr-3 text-xs font-semibold">Periodo facturado</th>
+                <th className="py-2 pr-3 text-xs font-semibold" title="Fecha de emisión del comprobante — no necesariamente el mes al que se cargó el gasto en el presupuesto">Fecha emisión</th>
+                <th className="py-2 pr-3 text-xs font-semibold" title="Mes al que se cargó el gasto en el presupuesto — puede ser distinto a la Fecha emisión">Mes</th>
                 <th className="py-2 pr-3 text-xs font-semibold">Proveedor</th>
                 <th className="py-2 pr-3 text-xs font-semibold">Empresa</th>
                 <th className="py-2 pr-3 text-xs font-semibold">Responsable</th>
@@ -449,6 +463,9 @@ export default function Facturas() {
                       onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)}
                       soloLectura={!puedeEditar}
                     />
+                  </td>
+                  <td className="py-1.5 pr-3 text-xs" style={{ color: "var(--texto-suave)" }}>
+                    {mesPresupuestalDeComentario(f.comentarios)}
                   </td>
                   <td className="py-1.5 pr-3">
                     <CampoEditable
