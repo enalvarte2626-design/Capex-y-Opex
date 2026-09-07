@@ -27,6 +27,11 @@ export default function FacturasOpex() {
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Mes de cierre REAL, leído del Excel (hoja "Config App") — el que de verdad usa el
+  // servidor al registrar una factura, no una copia fija en el código. Mientras carga,
+  // se usa MES_CIERRE_POR_DEFECTO solo como valor inicial para no dejar la pantalla en
+  // blanco un instante.
+  const [mesCierre, setMesCierre] = useState(MES_CIERRE_POR_DEFECTO);
   const [empresaSel, setEmpresaSel] = useState("");
   const [grupoSel, setGrupoSel] = useState("");
   const [subgrupoSel, setSubgrupoSel] = useState("");
@@ -82,6 +87,14 @@ export default function FacturasOpex() {
 
   useEffect(() => {
     cargar();
+    fetch("/api/opex/mes-cierre", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Number.isInteger(j?.mesCierre)) setMesCierre(j.mesCierre);
+      })
+      .catch(() => {
+        /* si falla, se queda con MES_CIERRE_POR_DEFECTO — el servidor igual valida bien */
+      });
   }, []);
 
   // Proveedores que ya aparecen en facturas registradas — para sugerirlos en el
@@ -175,7 +188,7 @@ export default function FacturasOpex() {
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
     const montoUsd = form.moneda === "USD" ? monto : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
-    const esMesPasado = Number(form.mes) <= MES_CIERRE_POR_DEFECTO;
+    const esMesPasado = Number(form.mes) <= mesCierre;
     const descripcionMonto =
       form.moneda === "PEN"
         ? `S/ ${monto.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO}`
@@ -321,7 +334,7 @@ export default function FacturasOpex() {
                 </option>
               ))}
             </select>
-            {Number(form.mes) <= MES_CIERRE_POR_DEFECTO && (
+            {Number(form.mes) <= mesCierre && (
               <p className="text-xs mt-1" style={{ color: "var(--alerta)" }}>
                 Mes ya cerrado: la factura queda en el historial pero NO se suma al
                 Presupuesto 2026 de ese mes.

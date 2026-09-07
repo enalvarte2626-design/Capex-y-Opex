@@ -20,7 +20,8 @@ import {
 } from "@/lib/opex-parse";
 import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
-import { MES_CIERRE_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
+import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
+import { leerMesCierre } from "@/lib/mesCierreConfig";
 
 export const dynamic = "force-dynamic";
 
@@ -111,14 +112,6 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
-  // Un mes ya CERRADO sí se puede registrar (queda en el historial de "Facturas Opex -
-  // App"), pero NUNCA suma al Gasto Real de Presupuesto 2026 — ese presupuesto ya se dio
-  // por cerrado para ese mes. "Cerrado" no es lo mismo que "mes calendario pasado": es el
-  // mismo MES_CIERRE_POR_DEFECTO que usa el Dashboard para separar Real de Forecast (hoy
-  // Julio) — de Agosto en adelante el gasto todavía no se da por cerrado, así que toda
-  // factura de Agosto en adelante SÍ debe sumar al presupuesto automáticamente al
-  // registrarla, aunque calendario-mente ya no sea "el mes actual".
-  const esMesPasado = mes <= MES_CIERRE_POR_DEFECTO;
   if (moneda !== "PEN" && moneda !== "USD") {
     return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
   }
@@ -150,6 +143,16 @@ export async function POST(request: Request) {
     const archivo = await resolverArchivoPorShareUrl(config);
     const hojaPresupuesto = process.env.SP_OPEX_HOJA_PRESUPUESTO?.trim() || "Presupuesto 2026";
     const hojaFacturas = process.env.SP_OPEX_HOJA_FACTURAS?.trim() || "Facturas Opex - App";
+
+    // Un mes ya CERRADO sí se puede registrar (queda en el historial de "Facturas Opex -
+    // App"), pero NUNCA suma al Gasto Real de Presupuesto 2026 — ese presupuesto ya se
+    // dio por cerrado para ese mes. "Cerrado" no es "mes calendario pasado": es el mismo
+    // mes de cierre que usa el Dashboard para separar Real de Forecast, guardado en el
+    // Excel (hoja "Config App") y ajustable desde el botón "Cerrar mes" en Presupuesto
+    // OPEX — así, de Agosto en adelante (mientras no se cierre Agosto también) toda
+    // factura nueva SÍ suma automáticamente al presupuesto, sin depender del calendario.
+    const mesCierre = await leerMesCierre(config, archivo);
+    const esMesPasado = mes <= mesCierre;
 
     const contenido = await descargarContenido(config, archivo);
     const wb = leerWorkbook(contenido);

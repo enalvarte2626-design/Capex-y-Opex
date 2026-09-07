@@ -86,6 +86,62 @@ export default function PresupuestoOpex() {
   const [mostrarSoles, setMostrarSoles] = usePersistedState("opex-presupuesto-mostrarSoles", false);
   const [tipoCambio, setTipoCambio] = useTipoCambio();
   const [mesCierre, setMesCierre] = useMesCierre();
+  // Mes de cierre REAL guardado en el Excel — el que de verdad usa el servidor para
+  // decidir si una factura nueva suma o no al Gasto Real (ver /api/opex/mes-cierre y
+  // /api/opex/facturas/registrar). El selector de acá arriba (mesCierre/setMesCierre) es
+  // solo una preferencia local para "probar" cómo se vería el Dashboard con otro corte,
+  // sin cerrar nada de verdad — por eso al cargar se sincroniza con el valor real.
+  const [mesCierreServidor, setMesCierreServidor] = useState<number | null>(null);
+  const [cerrandoMes, setCerrandoMes] = useState(false);
+  const [mensajeCierre, setMensajeCierre] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/opex/mes-cierre", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Number.isInteger(j?.mesCierre)) {
+          setMesCierreServidor(j.mesCierre);
+          setMesCierre(j.mesCierre);
+        }
+      })
+      .catch(() => {
+        /* si falla, el selector se queda con lo que ya tenía guardado en localStorage */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Cierra el mes siguiente al que está cerrado hoy (ej. si Julio está cerrado, cierra
+   *  Agosto) — de ahí en adelante, cualquier factura nueva registrada en Agosto SÍ suma
+   *  automáticamente al Gasto Real. No se puede deshacer desde acá a propósito: cerrar
+   *  un mes es una decisión real de negocio, no un ajuste de pantalla. */
+  async function cerrarMesSiguiente() {
+    if (mesCierreServidor == null || mesCierreServidor >= 12) return;
+    const mesNuevo = mesCierreServidor + 1;
+    const nombreMesNuevo = NOMBRES_MES_CIERRE[mesNuevo - 1];
+    const confirmado = window.confirm(
+      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto 2026 al registrarla — hasta ahora quedaba solo en el historial.`
+    );
+    if (!confirmado) return;
+
+    setCerrandoMes(true);
+    setMensajeCierre(null);
+    try {
+      const res = await fetch("/api/opex/mes-cierre", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mes: mesNuevo }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo cerrar el mes.");
+      setMesCierreServidor(json.mesCierre);
+      setMesCierre(json.mesCierre);
+      setMensajeCierre({ tipo: "ok", texto: `${json.nombreMesCierre} cerrado.` });
+    } catch (e) {
+      setMensajeCierre({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setCerrandoMes(false);
+    }
+  }
 
   function actualizarLocal(fila: number, cambios: Partial<ProyectoCapex>) {
     setLineas((prev) => prev?.map((x) => (x.filaExcel === fila ? { ...x, ...cambios } : x)) ?? prev);
@@ -313,7 +369,9 @@ export default function PresupuestoOpex() {
         </span>
         {mostrarSoles && <ControlTipoCambio tipoCambio={tipoCambio} onCambiar={setTipoCambio} />}
         <div className="flex items-center gap-2">
-          <span className="etiqueta mb-0">Mes de cierre:</span>
+          <span className="etiqueta mb-0" title="Solo cambia cómo se ve el Dashboard (Real vs. Forecast) — no cierra nada de verdad.">
+            Ver como si el cierre fuera:
+          </span>
           <select className="campo" style={{ width: "auto" }} value={mesCierre} onChange={(e) => setMesCierre(Number(e.target.value))}>
             {NOMBRES_MES_CIERRE.map((nombre, i) => (
               <option key={nombre} value={i + 1}>
@@ -322,6 +380,27 @@ export default function PresupuestoOpex() {
             ))}
           </select>
         </div>
+        {mesCierreServidor != null && mesCierreServidor < 12 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="boton-secundario"
+              onClick={cerrarMesSiguiente}
+              disabled={cerrandoMes}
+              title="Cierra el gasto de ese mes de verdad — de ahí en adelante, las facturas nuevas de ese mes suman solas al presupuesto"
+            >
+              {cerrandoMes ? "Cerrando…" : `Cerrar ${NOMBRES_MES_CIERRE[mesCierreServidor]}`}
+            </button>
+            {mensajeCierre && (
+              <span
+                className="text-xs"
+                style={{ color: mensajeCierre.tipo === "error" ? "var(--peligro)" : "var(--exito)" }}
+              >
+                {mensajeCierre.texto}
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-3 ml-auto">
           {actualizadoEn && (
             <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
