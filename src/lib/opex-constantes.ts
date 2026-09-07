@@ -15,3 +15,18 @@
  * cruzar el límite de compilación de Next.
  */
 export const TIPO_CAMBIO_POR_DEFECTO = 3.4;
+
+/**
+ * Mes de cierre (1-12): el último mes con Gasto Real ya cerrado de verdad — de ahí en
+ * adelante (mes de cierre + 1 en adelante) todavía está abierto y una factura nueva SÍ
+ * debe sumar al Gasto Real de Presupuesto 2026 automáticamente al registrarla.
+ *
+ * Hoy en 7 (Julio) → Agosto (8) en adelante se considera abierto. Cuando se cierre
+ * formalmente un mes más (ej. se cierre Agosto), subir este número a 8, y así sucesivamente.
+ *
+ * Vive acá (sin "use client") por el mismo motivo que TIPO_CAMBIO_POR_DEFECTO: se
+ * necesita tanto en `useMesCierre.ts` (cliente, para el Dashboard) como en las rutas de
+ * API de registro de facturas (servidor) — importarlo desde un archivo "use client" en
+ * el servidor rompe silenciosamente.
+ */
+export const MES_CIERRE_POR_DEFECTO = 7;

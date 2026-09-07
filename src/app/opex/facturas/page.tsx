@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
+import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import CampoEditable from "@/components/CampoEditable";
 import type { FacturaOpex } from "@/lib/opex-parse";
 
@@ -21,11 +22,6 @@ interface Respuesta {
   facturas: FacturaOpex[];
   actualizadoEn: string;
 }
-
-// Mes calendario real de hoy (1-12) — no el "mes de cierre" que se usa para separar
-// Real de Forecast en los dashboards, sino la fecha real: no se debe poder registrar una
-// factura en un mes que ya pasó.
-const mesActualReal = new Date().getMonth() + 1;
 
 export default function FacturasOpex() {
   const [datos, setDatos] = useState<Respuesta | null>(null);
@@ -179,7 +175,7 @@ export default function FacturasOpex() {
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
     const montoUsd = form.moneda === "USD" ? monto : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
-    const esMesPasado = Number(form.mes) < mesActualReal;
+    const esMesPasado = Number(form.mes) <= MES_CIERRE_POR_DEFECTO;
     const descripcionMonto =
       form.moneda === "PEN"
         ? `S/ ${monto.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO}`
@@ -187,7 +183,7 @@ export default function FacturasOpex() {
     const confirmado = window.confirm(
       `¿Registrar factura de ${descripcionMonto} para "${lineaElegida.lineaGasto}", período ${mesTexto}? ` +
         (esMesPasado
-          ? `${mesTexto} ya pasó: esto NO va a sumar al Gasto Real de Presupuesto 2026, solo queda en el historial.`
+          ? `${mesTexto} ya está cerrado: esto NO va a sumar al Gasto Real de Presupuesto 2026, solo queda en el historial.`
           : `Esto suma ${moneda2(montoUsd)} al Gasto Real de ${mesTexto} en Presupuesto 2026.`)
     );
     if (!confirmado) return;
@@ -325,9 +321,9 @@ export default function FacturasOpex() {
                 </option>
               ))}
             </select>
-            {Number(form.mes) < mesActualReal && (
+            {Number(form.mes) <= MES_CIERRE_POR_DEFECTO && (
               <p className="text-xs mt-1" style={{ color: "var(--alerta)" }}>
-                Mes ya pasado: la factura queda en el historial pero NO se suma al
+                Mes ya cerrado: la factura queda en el historial pero NO se suma al
                 Presupuesto 2026 de ese mes.
               </p>
             )}

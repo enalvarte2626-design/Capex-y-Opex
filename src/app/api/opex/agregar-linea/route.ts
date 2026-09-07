@@ -15,7 +15,7 @@ import {
 import { COL_PPTO_OPEX, ENCABEZADOS_FACTURAS_OPEX, extraerPresupuestoOpex } from "@/lib/opex-parse";
 import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
-import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
+import { MES_CIERRE_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
 export const dynamic = "force-dynamic";
 
@@ -66,11 +66,14 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
-  // Un mes ya pasado sí se puede registrar (queda en el historial de "Facturas Opex -
+  // Un mes ya CERRADO sí se puede registrar (queda en el historial de "Facturas Opex -
   // App"), pero NUNCA suma al Gasto Real de Presupuesto 2026 — ese presupuesto ya se dio
-  // por cerrado para ese mes. Solo el mes actual o uno futuro mueven el presupuesto.
-  const mesActualReal = new Date().getMonth() + 1;
-  const esMesPasado = mes < mesActualReal;
+  // por cerrado para ese mes. "Cerrado" no es lo mismo que "mes calendario pasado": es el
+  // mismo MES_CIERRE_POR_DEFECTO que usa el Dashboard para separar Real de Forecast (hoy
+  // Julio) — de Agosto en adelante el gasto todavía no se da por cerrado, así que toda
+  // factura de Agosto en adelante SÍ debe sumar al presupuesto automáticamente al
+  // registrarla, aunque calendario-mente ya no sea "el mes actual".
+  const esMesPasado = mes <= MES_CIERRE_POR_DEFECTO;
   if (moneda !== "PEN" && moneda !== "USD") {
     return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
   }
