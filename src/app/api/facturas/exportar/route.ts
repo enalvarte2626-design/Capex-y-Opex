@@ -8,20 +8,11 @@ import {
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
 import { extraerFacturas, extraerProyectos, leerWorkbook } from "@/lib/capex-parse";
-import { resolverFacturaABDCapex } from "@/lib/capex";
+import { NOMBRES_MES_CIERRE, resolverFacturaABDCapex } from "@/lib/capex";
 
 export const dynamic = "force-dynamic";
 
 const HOJA_FACTURAS = "Control de Facturas-Capex 25fEB";
-
-/** El comentario siempre trae "Periodo {Mes}" (se arma así al registrar la factura, ver
- *  /api/facturas/registrar) — se extrae directo de ahí para el reporte, sin depender de
- *  que `resolverFacturaABDCapex` pueda identificar la fila exacta de BD_CAPEX (el "Mes al
- *  que pertenece el gasto" puede ser distinto a la fecha de emisión del comprobante). */
-function mesPresupuestalDeComentario(comentarios: string): string {
-  const match = comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
-  return match ? match[1] : "—";
-}
 
 /**
  * Descarga el reporte de facturas CAPEX como un .xlsx real, ordenado por proyecto (línea
@@ -50,7 +41,7 @@ export async function GET() {
 
     const filas = ordenadas.map((f) => ({
       "Fecha Emisión": f.periodoFacturado || "—",
-      "Mes Presupuestal": mesPresupuestalDeComentario(f.comentarios),
+      "Mes Presupuestal": f.mesReal ? NOMBRES_MES_CIERRE[f.mesReal - 1] : "—",
       Proyecto: f.proyecto || "—",
       Proveedor: f.recurso || "—",
       "Empresa (código)": f.proveedor || "—",

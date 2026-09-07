@@ -63,6 +63,24 @@ export async function POST(request: Request) {
     }
   }
 
+  // Mes al que pertenece el gasto en el presupuesto — solo corrige el dato/etiqueta de
+  // esta factura, NUNCA recalcula el Gasto Real de BD_CAPEX (ese ajuste, si hiciera
+  // falta, se hace aparte con el campo Monto).
+  if (campo === "mesReal") {
+    const mes = Number(valorCrudo);
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
+      return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
+    }
+    try {
+      const archivo = await resolverArchivoPorShareUrl(config);
+      await escribirCelda(config, archivo, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.mesReal)}${fila}`, mes);
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
+      return NextResponse.json({ error: mensaje }, { status: 502 });
+    }
+  }
+
   const indiceColumna = CAMPOS_TEXTO[campo];
   if (indiceColumna === undefined) {
     return NextResponse.json({ error: `Campo "${campo}" no es editable.` }, { status: 400 });

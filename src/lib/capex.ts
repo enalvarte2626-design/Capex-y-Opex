@@ -67,6 +67,11 @@ export interface FacturaCapex {
   tipoCambio: number | null;
   /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
   ruc: string;
+  /** Mes (1-12) al que de verdad pertenece el gasto para el presupuesto — puede ser
+   *  distinto al mes de `periodoFacturado` (ej. factura emitida en agosto por un
+   *  servicio de julio). `null` solo si ni la columna "Mes Real" ni el viejo texto
+   *  "Periodo X" en Comentarios (facturas de antes de esta columna) traen un mes válido. */
+  mesReal: number | null;
 }
 
 export const NOMBRES_MES_CIERRE = [
@@ -104,25 +109,30 @@ export function resolverProyectos(proyectos: ProyectoCapex[], mesCierre: number)
 }
 
 /**
- * Encuentra a qué fila de BD_CAPEX (y qué mes) corresponde una factura, usando el mismo
- * texto que el módulo de Facturas ya escribe al registrarla: "Proyecto" = Detalle exacto
- * de esa fila, "Comentarios" = "Periodo {Mes}…". Si no hay una coincidencia única (ej.
- * facturas antiguas de antes de este módulo, con otro formato), devuelve null — esas
+ * Encuentra a qué fila de BD_CAPEX (y qué mes) corresponde una factura, usando "Proyecto"
+ * = Detalle exacto de esa fila, y el mes de "Mes Real" (columna dedicada) — o, para
+ * facturas registradas antes de que existiera esa columna, el viejo texto "Periodo
+ * {Mes}…" dentro de Comentarios. Si no hay una coincidencia única, devuelve null — esas
  * facturas no permiten editar el Monto porque no se puede ajustar el Gasto Real con
  * certeza.
  */
 export function resolverFacturaABDCapex(
-  factura: { proyecto: string; comentarios: string },
+  factura: { proyecto: string; comentarios: string; mesReal: number | null },
   proyectos: ProyectoCapex[]
 ): { filaProyecto: number; mes: number } | null {
   const textoProyecto = factura.proyecto.trim().toLowerCase();
   if (!textoProyecto) return null;
 
-  const mesMatch = factura.comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
-  if (!mesMatch) return null;
-  const mesTexto = mesMatch[1].toLowerCase();
-  const indiceMes = NOMBRES_MES_CIERRE.findIndex((n) => n.toLowerCase() === mesTexto);
-  if (indiceMes === -1) return null;
+  let mes = factura.mesReal;
+  if (mes == null) {
+    const mesMatch = factura.comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
+    if (!mesMatch) return null;
+    const mesTexto = mesMatch[1].toLowerCase();
+    const indiceMes = NOMBRES_MES_CIERRE.findIndex((n) => n.toLowerCase() === mesTexto);
+    if (indiceMes === -1) return null;
+    mes = indiceMes + 1;
+  }
+  if (mes < 1 || mes > 12) return null;
 
   const coincidencias = proyectos.filter((p) => {
     const detalle = p.detalle.trim().toLowerCase();
@@ -131,7 +141,7 @@ export function resolverFacturaABDCapex(
   });
   if (coincidencias.length !== 1) return null;
 
-  return { filaProyecto: coincidencias[0].filaExcel, mes: indiceMes + 1 };
+  return { filaProyecto: coincidencias[0].filaExcel, mes };
 }
 
 /** Lo mínimo que necesitan los cálculos de grupo/prioridad/trimestre — BD_CAPEX y la

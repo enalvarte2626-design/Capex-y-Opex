@@ -25,9 +25,45 @@ export const COL_FACTURAS = {
   montoSoles: 10, // K: Monto en Soles sin IGV — solo cuando se ingresó en Soles
   tipoCambio: 11, // L: Tipo de cambio usado para convertir esta factura en particular
   ruc: 12, // M: RUC del proveedor (solo aplica a proveedores peruanos) — opcional
+  // N: Mes Real (1-12) — el mes al que de verdad pertenece el gasto para el presupuesto,
+  // que puede ser distinto al mes de la Fecha de emisión (ej. factura emitida en agosto
+  // por un servicio de julio). Antes esta información solo vivía como texto "Periodo X"
+  // dentro de Comentarios; ahora es su propia columna, más fácil de leer y de corregir.
+  mesReal: 13, // N
 } as const;
 
-export const ENCABEZADOS_NUEVOS_FACTURAS = ["Moneda ingresada", "Monto Soles (sin IGV)", "Tipo de Cambio", "RUC"];
+export const ENCABEZADOS_NUEVOS_FACTURAS = [
+  "Moneda ingresada",
+  "Monto Soles (sin IGV)",
+  "Tipo de Cambio",
+  "RUC",
+  "Mes Real",
+];
+
+const NOMBRES_MES_MIN = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+/** Extrae el mes (1-12) del viejo texto "Periodo {Mes}" dentro de Comentarios — solo
+ *  como respaldo para facturas de antes de que existiera la columna "Mes Real" (o que la
+ *  migración todavía no haya corregido). */
+export function mesDesdeComentario(comentarios: string): number | null {
+  const match = comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
+  if (!match) return null;
+  const indice = NOMBRES_MES_MIN.indexOf(match[1].toLowerCase());
+  return indice === -1 ? null : indice + 1;
+}
 
 /** Índices de columna (0-based) dentro de BD_CAPEX, según el layout confirmado del archivo. */
 export const COL_BD = {
@@ -161,6 +197,10 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
       montoSolesEsCalculado = true;
     }
 
+    const comentarios = aTexto(fila[COL_FACTURAS.comentarios]);
+    const mesRealTxt = fila[COL_FACTURAS.mesReal];
+    const mesReal = mesRealTxt !== "" && mesRealTxt != null ? aNumero(mesRealTxt) || null : mesDesdeComentario(comentarios);
+
     facturas.push({
       filaExcel: i + 1,
       periodoFacturado: periodoTexto,
@@ -172,12 +212,13 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
       monto,
       numeroFactura,
       registrado: aTexto(fila[COL_FACTURAS.registrado]),
-      comentarios: aTexto(fila[COL_FACTURAS.comentarios]),
+      comentarios,
       moneda: (aTexto(fila[COL_FACTURAS.moneda]) as "PEN" | "USD" | ""),
       montoSoles,
       montoSolesEsCalculado,
       tipoCambio: tipoCambioNum,
       ruc: aTexto(fila[COL_FACTURAS.ruc]),
+      mesReal,
     });
   }
   return facturas;

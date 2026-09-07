@@ -27,14 +27,6 @@ interface Respuesta {
 
 const HOY = () => new Date().toISOString().slice(0, 10);
 
-/** El comentario siempre trae "Periodo {Mes}" (se arma así al registrar la factura) —
- *  se usa como respaldo para mostrar el Mes presupuestal aunque `resolucion` no haya
- *  podido identificar la fila exacta de BD_CAPEX (proyecto con nombre ambiguo, etc.). */
-function mesPresupuestalDeComentario(comentarios: string): string {
-  const match = comentarios.match(/Periodo\s+([A-Za-zÀ-ÿ]+)/i);
-  return match ? match[1] : "—";
-}
-
 export default function Facturas() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
@@ -64,6 +56,36 @@ export default function Facturas() {
   });
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [migrando, setMigrando] = useState(false);
+  const [mensajeMigracion, setMensajeMigracion] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  /** Migración de datos, un solo uso: copia el mes que ya tenían las facturas antiguas
+   *  (texto "Periodo X" en Comentarios) a la nueva columna "Mes Real", y limpia el
+   *  comentario. No toca el Gasto Real de BD_CAPEX — esos montos ya están cargados. */
+  async function migrarMesReal() {
+    const confirmado = window.confirm(
+      "Esto corrige el dato del Mes en las facturas ya registradas (moviéndolo de Comentarios a su propia columna). No cambia ningún monto del presupuesto. ¿Continuar?"
+    );
+    if (!confirmado) return;
+    setMigrando(true);
+    setMensajeMigracion(null);
+    try {
+      const res = await fetch("/api/facturas/migrar-mes-real", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo migrar.");
+      setMensajeMigracion({
+        tipo: "ok",
+        texto: `Listo: ${json.migradas} de ${json.totalFacturas} facturas corregidas.${
+          json.sinMesDetectado?.length ? ` ${json.sinMesDetectado.length} sin mes detectable (corrígelas a mano en la columna Mes).` : ""
+        }`,
+      });
+      await cargar();
+    } catch (e) {
+      setMensajeMigracion({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setMigrando(false);
+    }
+  }
 
   /** Aplica un cambio ya guardado con éxito a una factura, sin volver a leer el Excel. */
   function actualizarFacturaLocal(filaExcel: number, cambios: Partial<FacturaConResolucion>) {
@@ -415,14 +437,29 @@ export default function Facturas() {
       <div className="card p-0 overflow-hidden">
         <div className="p-4 pb-0 flex items-center justify-between gap-3 flex-wrap">
           <h3 className="font-semibold">Últimas facturas registradas</h3>
-          <a href="/api/facturas/exportar" className="boton-secundario" download>
-            Descargar reporte (Excel)
-          </a>
+          <div className="flex items-center gap-3 flex-wrap">
+            {puedeEditar && (
+              <button type="button" className="boton-secundario text-xs" onClick={migrarMesReal} disabled={migrando}>
+                {migrando ? "Corrigiendo…" : "Corregir Mes de facturas antiguas (una vez)"}
+              </button>
+            )}
+            <a href="/api/facturas/exportar" className="boton-secundario" download>
+              Descargar reporte (Excel)
+            </a>
+          </div>
         </div>
+        {mensajeMigracion && (
+          <p
+            className="px-4 pt-2 text-xs"
+            style={{ color: mensajeMigracion.tipo === "error" ? "var(--peligro)" : "var(--exito)" }}
+          >
+            {mensajeMigracion.texto}
+          </p>
+        )}
         <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
           El Excel descargado viene ordenado por Proyecto.
           {puedeEditar &&
-            " Todos los campos de la tabla de abajo son editables directo — se guardan al salir del campo. El Monto solo se puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale de solo lectura, con una nota)."}
+            " Todos los campos de la tabla de abajo son editables directo — se guardan al salir del campo. Cambiar el Mes solo corrige la etiqueta de esta factura, no vuelve a sumar ni restar del presupuesto. El Monto solo se puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale de solo lectura, con una nota)."}
         </p>
         <div className="overflow-x-auto p-4">
           <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1400 }}>
@@ -464,8 +501,8 @@ export default function Facturas() {
                       soloLectura={!puedeEditar}
                     />
                   </td>
-                  <td className="py-1.5 pr-3 text-xs" style={{ color: "var(--texto-suave)" }}>
-                    {mesPresupuestalDeComentario(f.comentarios)}
+                  <td className="py-1.5 pr-3">
+                    <CampoMes factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} soloLectura={!puedeEditar} />
                   </td>
                   <td className="py-1.5 pr-3">
                     <CampoEditable
@@ -618,6 +655,75 @@ function CampoFecha({
         onChange={(e) => setValor(e.target.value)}
         onBlur={guardar}
       />
+      {error && (
+        <p className="text-xs mt-0.5" style={{ color: "var(--peligro)" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Corrige el Mes al que pertenece el gasto (independiente de la Fecha de emisión) —
+ * solo cambia esta etiqueta/dato; NUNCA vuelve a sumar ni restar del Gasto Real de
+ * BD_CAPEX (ese ajuste, si hiciera falta, se hace aparte con el campo Monto).
+ */
+function CampoMes({
+  factura,
+  onGuardado,
+  soloLectura,
+}: {
+  factura: FacturaConResolucion;
+  onGuardado: (cambios: Partial<FacturaConResolucion>) => void;
+  soloLectura?: boolean;
+}) {
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (soloLectura) {
+    return <span className="text-xs">{factura.mesReal ? NOMBRES_MES_CIERRE[factura.mesReal - 1] : "—"}</span>;
+  }
+
+  async function guardar(valor: string) {
+    const mes = Number(valor);
+    if (!Number.isInteger(mes) || mes === factura.mesReal) return;
+    setError(null);
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/facturas/editar-campo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fila: factura.filaExcel, campo: "mesReal", valor: mes }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo guardar.");
+      onGuardado({ mesReal: mes });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div>
+      <select
+        className="text-xs"
+        style={{ background: "transparent", border: "1px solid transparent", width: "100%", opacity: guardando ? 0.6 : 1 }}
+        value={factura.mesReal ?? ""}
+        disabled={guardando}
+        onChange={(e) => guardar(e.target.value)}
+      >
+        <option value="" disabled>
+          —
+        </option>
+        {NOMBRES_MES_CIERRE.map((nombre, i) => (
+          <option key={nombre} value={i + 1}>
+            {nombre}
+          </option>
+        ))}
+      </select>
       {error && (
         <p className="text-xs mt-0.5" style={{ color: "var(--peligro)" }}>
           {error}

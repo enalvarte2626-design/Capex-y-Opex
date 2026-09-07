@@ -19,7 +19,6 @@ import {
   ultimaFilaConDatosEscaneada,
 } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
-import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
 export const dynamic = "force-dynamic";
@@ -112,18 +111,19 @@ export async function POST(request: Request) {
     }
     const textoProyecto = proyecto.detalle?.trim() || proyecto.proyecto;
 
-    // 2) Si la hoja de facturas todavía no tiene las columnas J-M (Moneda/Monto
-    //    Soles/Tipo de Cambio/RUC), agrega los encabezados una sola vez — nunca corre
-    //    ninguna columna existente.
+    // 2) Si la hoja de facturas todavía no tiene las columnas J-N (Moneda/Monto
+    //    Soles/Tipo de Cambio/RUC/Mes Real), agrega los encabezados una sola vez — nunca
+    //    corre ninguna columna existente.
     if (!leerCeldaCruda(wb, HOJA_FACTURAS, "J1")) {
-      await escribirFila(config, archivo, HOJA_FACTURAS, 1, "J", "M", ENCABEZADOS_NUEVOS_FACTURAS);
+      await escribirFila(config, archivo, HOJA_FACTURAS, 1, "J", "N", ENCABEZADOS_NUEVOS_FACTURAS);
     }
 
-    // 3) Agrega la factura al final de la hoja de facturas.
+    // 3) Agrega la factura al final de la hoja de facturas. El mes al que pertenece el
+    //    gasto ya no se embebe como texto en Comentarios ("Periodo X") — vive directo en
+    //    su propia columna (Mes Real), así Comentarios queda libre para notas reales.
     const ultimaFila = ultimaFilaConDatosEscaneada(wb, HOJA_FACTURAS);
     const filaNueva = ultimaFila + 1;
-    const comentario = `Periodo ${NOMBRES_MES_CIERRE[mes - 1]}${comentarioExtra ? ` — ${comentarioExtra}` : ""}`;
-    await escribirFila(config, archivo, HOJA_FACTURAS, filaNueva, "A", "M", [
+    await escribirFila(config, archivo, HOJA_FACTURAS, filaNueva, "A", "N", [
       fechaAExcelSerial(fecha),
       recurso,
       proveedor,
@@ -132,11 +132,12 @@ export async function POST(request: Request) {
       monto,
       numeroFactura,
       "ok",
-      comentario,
+      comentarioExtra?.trim() ?? "",
       moneda,
       montoSoles ?? "",
       tipoCambio,
       ruc?.trim() ?? "",
+      mes,
     ]);
 
     // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en BD_CAPEX (no
