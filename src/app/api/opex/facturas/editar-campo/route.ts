@@ -18,6 +18,7 @@ const CAMPOS_TEXTO: Record<string, number> = {
   proveedor: COL_FACTURAS_OPEX.proveedor,
   numeroComprobante: COL_FACTURAS_OPEX.numeroComprobante,
   comentario: COL_FACTURAS_OPEX.comentario,
+  ruc: COL_FACTURAS_OPEX.ruc,
 };
 
 export async function POST(request: Request) {

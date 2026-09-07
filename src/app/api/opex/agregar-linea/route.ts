@@ -30,6 +30,8 @@ interface CuerpoRegistro {
   proveedor: string;
   numeroComprobante: string;
   comentario?: string;
+  /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
+  ruc?: string;
 }
 
 /**
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
   const cuerpo = (await request.json().catch(() => null)) as CuerpoRegistro | null;
   if (!cuerpo) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
 
-  const { filaPresupuesto, mes, moneda, monto: montoIngresado, proveedor, numeroComprobante, comentario } = cuerpo;
+  const { filaPresupuesto, mes, moneda, monto: montoIngresado, proveedor, numeroComprobante, comentario, ruc } = cuerpo;
 
   if (!Number.isInteger(filaPresupuesto) || filaPresupuesto < 2) {
     return NextResponse.json({ error: "Línea de gasto inválida." }, { status: 400 });
@@ -118,7 +120,15 @@ export async function POST(request: Request) {
     const hojaExisteConDatos = wbActualizado.Sheets[hojaFacturas]?.["!ref"] != null;
     if (!hojaExisteConDatos) {
       // Hoja recién creada, todavía sin nada — escribe el encabezado.
-      await escribirFila(config, archivo, hojaFacturas, 1, "A", "P", ENCABEZADOS_FACTURAS_OPEX);
+      await escribirFila(
+        config,
+        archivo,
+        hojaFacturas,
+        1,
+        "A",
+        columnaALetra(ENCABEZADOS_FACTURAS_OPEX.length - 1),
+        ENCABEZADOS_FACTURAS_OPEX
+      );
     }
 
     // 3) Agrega la factura al final de esa hoja — vía la Tabla de Excel de la hoja (no
@@ -143,6 +153,7 @@ export async function POST(request: Request) {
       tipoCambio,
       linea.subNegocio,
       moneda,
+      ruc?.trim() ?? "",
     ]);
 
     // Un mes pasado queda solo en el historial — nunca toca Presupuesto 2026.

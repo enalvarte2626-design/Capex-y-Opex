@@ -49,6 +49,7 @@ export const COL_FACTURAS_OPEX = {
   tipoCambio: 13, // Tipo de cambio usado para convertir esta factura en particular
   empresa: 14, // Empresa de la línea de gasto elegida (viene de Presupuesto 2026)
   moneda: 15, // "PEN" o "USD" — en qué moneda se ingresó originalmente el monto
+  ruc: 16, // RUC del proveedor (solo aplica a proveedores peruanos) — opcional
 } as const;
 
 export const ENCABEZADOS_FACTURAS_OPEX = [
@@ -68,7 +69,17 @@ export const ENCABEZADOS_FACTURAS_OPEX = [
   "Tipo de Cambio",
   "Empresa",
   "Moneda ingresada",
+  "RUC",
 ];
+
+/** Serial de Excel (días desde 1899-12-30) → Date — el inverso de `fechaAExcelSerial` de
+ *  capex-parse.ts. Hace falta porque las fechas que escribe la app (número plano, sin
+ *  formato de celda aplicado) vuelven de Graph como número, no como Date — a diferencia
+ *  de fechas que alguien tipeó directo en Excel con formato de fecha. */
+function serialExcelAFecha(serial: number): Date {
+  const epoca = Date.UTC(1899, 11, 30);
+  return new Date(epoca + serial * 86_400_000);
+}
 
 function aNumero(valor: unknown): number {
   if (typeof valor === "number") return valor;
@@ -171,6 +182,9 @@ export interface FacturaOpex {
    *  registradas antes de que existiera el selector de moneda (esas siempre fueron en
    *  Soles, es la única moneda que aceptaba el formulario en ese momento). */
   moneda: "PEN" | "USD" | "";
+  /** RUC del proveedor — vacío si no se conoce o si el proveedor no es peruano (el RUC
+   *  es un identificador tributario solo de empresas registradas en Perú). */
+  ruc: string;
 }
 
 /** Extrae "Facturas Opex - App" — si la hoja todavía no existe (nadie ha registrado
@@ -188,7 +202,16 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
     if (!proveedor && !lineaGasto) continue;
 
     const fechaCruda = fila[COL_FACTURAS_OPEX.fecha];
-    const fecha = fechaCruda instanceof Date ? fechaCruda.toLocaleDateString("es-PE") : aTexto(fechaCruda);
+    let fecha: string;
+    if (fechaCruda instanceof Date) {
+      fecha = fechaCruda.toLocaleDateString("es-PE");
+    } else if (typeof fechaCruda === "number" && fechaCruda > 0) {
+      // Serial de Excel sin formato de fecha aplicado (así queda al escribirla desde la
+      // app) — se convierte acá para mostrar una fecha real, no el número crudo.
+      fecha = serialExcelAFecha(fechaCruda).toLocaleDateString("es-PE", { timeZone: "UTC" });
+    } else {
+      fecha = aTexto(fechaCruda);
+    }
 
     const filaPresupuestoTxt = fila[COL_FACTURAS_OPEX.filaPresupuesto];
     const mesTxt = fila[COL_FACTURAS_OPEX.mes];
@@ -225,6 +248,7 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       tipoCambio: tipoCambioNum,
       empresa: aTexto(fila[COL_FACTURAS_OPEX.empresa]),
       moneda: (aTexto(fila[COL_FACTURAS_OPEX.moneda]) as "PEN" | "USD" | ""),
+      ruc: aTexto(fila[COL_FACTURAS_OPEX.ruc]),
     });
   }
   return facturas;

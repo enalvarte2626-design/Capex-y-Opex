@@ -44,10 +44,34 @@ export default function FacturasOpex() {
     monto: "",
     proveedor: "",
     numeroComprobante: "",
+    // Solo aplica a proveedores peruanos (el RUC es un identificador tributario de Perú)
+    // — se deja vacío sin problema para proveedores extranjeros.
+    ruc: "",
     comentario: "",
   });
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [rellenandoRuc, setRellenandoRuc] = useState(false);
+  const [mensajeRuc, setMensajeRuc] = useState<string | null>(null);
+
+  // Completa el RUC de facturas ya registradas cuyo proveedor es peruano y conocido (ver
+  // backfill-ruc/route.ts) — un botón de un solo uso, no algo que haga falta correr
+  // seguido: las facturas nuevas ya piden el RUC directo en el formulario.
+  async function rellenarRucConocidos() {
+    setRellenandoRuc(true);
+    setMensajeRuc(null);
+    try {
+      const res = await fetch("/api/opex/facturas/backfill-ruc", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo completar el RUC.");
+      setMensajeRuc(json.mensaje);
+      if (json.actualizadas?.length > 0) await cargar();
+    } catch (e) {
+      setMensajeRuc((e as Error).message);
+    } finally {
+      setRellenandoRuc(false);
+    }
+  }
 
   // Solo para mostrar el equivalente en pantalla mientras se escribe — el backend hace
   // su propio cálculo con el mismo tipo de cambio, así que esto es únicamente una vista
@@ -170,6 +194,7 @@ export default function FacturasOpex() {
           monto,
           proveedor: form.proveedor,
           numeroComprobante: form.numeroComprobante,
+          ruc: form.ruc || undefined,
           comentario: form.comentario || undefined,
         }),
       });
@@ -181,7 +206,7 @@ export default function FacturasOpex() {
           ? `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`
           : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? "No se modificó el Presupuesto 2026."}`,
       });
-      setForm((prev) => ({ ...prev, monto: "", numeroComprobante: "", comentario: "" }));
+      setForm((prev) => ({ ...prev, monto: "", numeroComprobante: "", ruc: "", comentario: "" }));
       await cargar();
     } catch (e) {
       setMensaje({ tipo: "error", texto: (e as Error).message });
@@ -355,6 +380,15 @@ export default function FacturasOpex() {
               onChange={(e) => setForm((p) => ({ ...p, numeroComprobante: e.target.value }))}
             />
           </div>
+          <div>
+            <label className="etiqueta">RUC (opcional, solo proveedores peruanos)</label>
+            <input
+              type="text"
+              className="campo"
+              value={form.ruc}
+              onChange={(e) => setForm((p) => ({ ...p, ruc: e.target.value }))}
+            />
+          </div>
           <div className="sm:col-span-2">
             <label className="etiqueta">Comentario (opcional)</label>
             <input
@@ -379,9 +413,32 @@ export default function FacturasOpex() {
       </form>
 
       <div className="card p-0 overflow-hidden">
-        <div className="p-4 pb-0">
+        <div className="p-4 pb-0 flex items-center justify-between gap-3 flex-wrap">
           <h3 className="font-semibold">Últimas facturas registradas</h3>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="boton-secundario"
+              onClick={rellenarRucConocidos}
+              disabled={rellenandoRuc}
+              title="Completa el RUC de facturas ya registradas cuyo proveedor es peruano y conocido"
+            >
+              {rellenandoRuc ? "Buscando…" : "Completar RUC conocidos"}
+            </button>
+            <a href="/api/opex/facturas/exportar" className="boton-secundario" download>
+              Descargar reporte (Excel)
+            </a>
+          </div>
         </div>
+        {mensajeRuc && (
+          <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
+            {mensajeRuc}
+          </p>
+        )}
+        <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
+          El Excel descargado trae todas las columnas completas y viene ordenado por Línea de Gasto — la tabla de
+          abajo muestra las más recientes primero.
+        </p>
         <div className="overflow-x-auto p-4">
           <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1610 }}>
             <colgroup>
@@ -395,6 +452,7 @@ export default function FacturasOpex() {
               <col style={{ width: 110 }} />
               <col style={{ width: 110 }} />
               <col style={{ width: 130 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 200 }} />
             </colgroup>
             <thead>
@@ -409,6 +467,7 @@ export default function FacturasOpex() {
                 <th className="py-2 pr-3 text-right">Monto (USD)</th>
                 <th className="py-2 pr-3 text-right">Soles (sin IGV)</th>
                 <th className="py-2 pr-3">N° Comprobante</th>
+                <th className="py-2 pr-3">RUC</th>
                 <th className="py-2 pr-3">Comentario</th>
               </tr>
             </thead>
@@ -464,6 +523,16 @@ export default function FacturasOpex() {
                   <td className="py-1.5 pr-3">
                     <CampoEditable
                       fila={f.filaExcel}
+                      campo="ruc"
+                      tipo="texto"
+                      valor={f.ruc}
+                      endpoint="/api/opex/facturas/editar-campo"
+                      onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { ruc: String(v) })}
+                    />
+                  </td>
+                  <td className="py-1.5 pr-3">
+                    <CampoEditable
+                      fila={f.filaExcel}
                       campo="comentario"
                       tipo="texto"
                       valor={f.comentario}
@@ -475,7 +544,7 @@ export default function FacturasOpex() {
               ))}
               {(datos?.facturas ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-4 text-center text-sm" style={{ color: "var(--texto-suave)" }}>
+                  <td colSpan={12} className="py-4 text-center text-sm" style={{ color: "var(--texto-suave)" }}>
                     Todavía no hay facturas registradas desde la app.
                   </td>
                 </tr>

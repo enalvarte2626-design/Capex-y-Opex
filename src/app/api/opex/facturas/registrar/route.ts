@@ -70,6 +70,8 @@ interface CuerpoRegistro {
   proveedor: string;
   numeroComprobante: string;
   comentario?: string;
+  /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
+  ruc?: string;
 }
 
 /**
@@ -101,7 +103,7 @@ export async function POST(request: Request) {
   const cuerpo = (await request.json().catch(() => null)) as CuerpoRegistro | null;
   if (!cuerpo) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
 
-  const { filaPresupuesto, mes, moneda, monto: montoIngresado, proveedor, numeroComprobante, comentario } = cuerpo;
+  const { filaPresupuesto, mes, moneda, monto: montoIngresado, proveedor, numeroComprobante, comentario, ruc } = cuerpo;
 
   if (!Number.isInteger(filaPresupuesto) || filaPresupuesto < 2) {
     return NextResponse.json({ error: "Línea de gasto inválida." }, { status: 400 });
@@ -159,7 +161,15 @@ export async function POST(request: Request) {
     const wbActualizado = leerWorkbook(contenidoActualizado);
     const hojaExisteConDatos = wbActualizado.Sheets[hojaFacturas]?.["!ref"] != null;
     if (!hojaExisteConDatos) {
-      await escribirFila(config, archivo, hojaFacturas, 1, "A", "P", ENCABEZADOS_FACTURAS_OPEX);
+      await escribirFila(
+        config,
+        archivo,
+        hojaFacturas,
+        1,
+        "A",
+        columnaALetra(ENCABEZADOS_FACTURAS_OPEX.length - 1),
+        ENCABEZADOS_FACTURAS_OPEX
+      );
     }
     // Asegura que la hoja tenga una Tabla de Excel real antes de agregar la fila — ver
     // el comentario de `agregarFilaTabla` en sharepoint.ts sobre por qué esto reemplaza
@@ -183,6 +193,7 @@ export async function POST(request: Request) {
       tipoCambio,
       linea.subNegocio,
       moneda,
+      ruc?.trim() ?? "",
     ]);
 
     // Un mes pasado queda solo en el historial — nunca toca Presupuesto 2026.
