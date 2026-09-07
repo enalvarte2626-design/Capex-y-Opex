@@ -64,7 +64,7 @@ export default function Facturas() {
    *  comentario. No toca el Gasto Real de BD_CAPEX — esos montos ya están cargados. */
   async function migrarMesReal() {
     const confirmado = window.confirm(
-      "Esto corrige el dato del Mes en las facturas ya registradas (moviéndolo de Comentarios a su propia columna). No cambia ningún monto del presupuesto. ¿Continuar?"
+      "Esto corrige el dato del Mes en las facturas ya registradas (moviéndolo de Comentarios a su propia columna). No cambia ningún monto del presupuesto. Puede tardar hasta un minuto si hay muchas facturas — no cierres esta pestaña mientras dice \"Corrigiendo…\". ¿Continuar?"
     );
     if (!confirmado) return;
     setMigrando(true);
@@ -318,7 +318,7 @@ export default function Facturas() {
           </div>
 
           <div>
-            <label className="etiqueta">Mes al que pertenece el gasto (carga aquí al presupuesto)</label>
+            <label className="etiqueta">Mes Real (mes al que pertenece el gasto — carga aquí al presupuesto)</label>
             <select className="campo" value={form.mes} onChange={(e) => actualizarCampo("mes", e.target.value)} required>
               {NOMBRES_MES_CIERRE.map((nombre, i) => (
                 <option key={nombre} value={i + 1}>

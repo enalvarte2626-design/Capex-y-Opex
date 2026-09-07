@@ -3,7 +3,6 @@ import {
   ErrorSharePoint,
   camposFaltantes,
   descargarContenido,
-  escribirCelda,
   escribirFila,
   obtenerConfiguracionSharePoint,
   resolverArchivoPorShareUrl,
@@ -19,6 +18,10 @@ import {
 import { columnaALetra } from "@/lib/capex-editable";
 
 export const dynamic = "force-dynamic";
+// Corrige muchas filas seguidas (una llamada a Graph por fila) — el límite por defecto
+// de la función (10s) no alcanza ni para una base de datos mediana; 60s da margen de
+// sobra sin necesitar procesar por lotes.
+export const maxDuration = 60;
 
 const HOJA_FACTURAS = "Control de Facturas-Capex 25fEB";
 
@@ -60,19 +63,32 @@ export async function POST() {
     const sinMes: number[] = [];
 
     for (const f of facturas) {
-      const celdaMes = `${columnaALetra(COL_FACTURAS.mesReal)}${f.filaExcel}`;
-      const yaTieneMesReal = Boolean(leerCeldaCruda(wb, HOJA_FACTURAS, celdaMes));
-      if (yaTieneMesReal) continue;
+      const celdaMesCruda = leerCeldaCruda(wb, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.mesReal)}${f.filaExcel}`);
+      const yaTieneMesReal = Boolean(celdaMesCruda);
+      // Reconoce un intento anterior cortado a medias (ej. por un timeout): si el Mes Real
+      // ya quedó puesto pero el comentario todavía trae el viejo "Periodo X" sin limpiar,
+      // igual hay algo que corregir acá.
+      const comentarioTienePeriodo = /^Periodo\s+[A-Za-zÀ-ÿ]+/i.test(f.comentarios);
+      if (yaTieneMesReal && !comentarioTienePeriodo) continue;
 
-      const mes = mesDesdeComentario(f.comentarios);
+      const mes = yaTieneMesReal ? Number(celdaMesCruda) : mesDesdeComentario(f.comentarios);
       if (mes == null) {
         sinMes.push(f.filaExcel);
         continue;
       }
 
-      await escribirCelda(config, archivo, HOJA_FACTURAS, celdaMes, mes);
-      const celdaComentario = `${columnaALetra(COL_FACTURAS.comentarios)}${f.filaExcel}`;
-      await escribirCelda(config, archivo, HOJA_FACTURAS, celdaComentario, comentarioSinPeriodo(f.comentarios));
+      // Un solo PATCH por fila (columnas I-N juntas) en vez de dos por separado — la
+      // mitad de las llamadas a Graph, la mitad del tiempo. Los valores de Moneda/Monto
+      // Soles/Tipo de Cambio/RUC se re-escriben tal cual ya estaban (crudos, sin
+      // reformatear) para no arriesgar ningún cambio en esas columnas.
+      await escribirFila(config, archivo, HOJA_FACTURAS, f.filaExcel, "I", "N", [
+        comentarioSinPeriodo(f.comentarios),
+        leerCeldaCruda(wb, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.moneda)}${f.filaExcel}`),
+        leerCeldaCruda(wb, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.montoSoles)}${f.filaExcel}`),
+        leerCeldaCruda(wb, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.tipoCambio)}${f.filaExcel}`),
+        leerCeldaCruda(wb, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.ruc)}${f.filaExcel}`),
+        mes,
+      ]);
       migradas++;
     }
 
