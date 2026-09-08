@@ -37,8 +37,10 @@ export async function POST(request: Request) {
   if (!Number.isInteger(filaFactura) || filaFactura < 2) {
     return NextResponse.json({ error: "Fila inválida." }, { status: 400 });
   }
-  if (!Number.isFinite(montoNuevo) || montoNuevo <= 0) {
-    return NextResponse.json({ error: "El monto debe ser mayor a 0." }, { status: 400 });
+  // Negativo se permite (factura corregida a descuento/nota de crédito); solo 0 no
+  // tiene sentido.
+  if (!Number.isFinite(montoNuevo) || montoNuevo === 0) {
+    return NextResponse.json({ error: "El monto no puede ser 0." }, { status: 400 });
   }
 
   try {

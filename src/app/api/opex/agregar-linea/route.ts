@@ -70,9 +70,16 @@ export async function POST(request: Request) {
   if (moneda !== "PEN" && moneda !== "USD") {
     return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
   }
-  if (!Number.isFinite(montoIngresado) || montoIngresado <= 0) {
+  // Negativo se permite a propósito: es como se registra un descuento o nota de crédito
+  // (resta del Gasto Real en vez de sumar, más abajo). Solo 0 no tiene sentido.
+  if (!Number.isFinite(montoIngresado) || montoIngresado === 0) {
     return NextResponse.json(
-      { error: moneda === "PEN" ? "El monto en Soles debe ser mayor a 0." : "El monto en dólares debe ser mayor a 0." },
+      {
+        error:
+          moneda === "PEN"
+            ? "El monto en Soles no puede ser 0 (usa negativo para un descuento o nota de crédito)."
+            : "El monto en dólares no puede ser 0 (usa negativo para un descuento o nota de crédito).",
+      },
       { status: 400 }
     );
   }

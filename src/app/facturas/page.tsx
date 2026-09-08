@@ -224,7 +224,7 @@ export default function Facturas() {
   // su propio cálculo con el mismo tipo de cambio, así que esto es únicamente una vista
   // previa, nunca lo que de verdad se guarda.
   const montoNum = Number(form.monto);
-  const hayMontoValido = Number.isFinite(montoNum) && montoNum > 0;
+  const hayMontoValido = Number.isFinite(montoNum) && montoNum !== 0;
   const montoUsdPrevio =
     form.moneda === "PEN" && hayMontoValido ? Math.round((montoNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100 : null;
   const montoSolesPrevio =
@@ -249,22 +249,28 @@ export default function Facturas() {
       return;
     }
     const monto = Number(form.monto);
-    if (!Number.isFinite(monto) || monto <= 0) {
+    // Negativo se permite a propósito: es como se registra un descuento o nota de
+    // crédito (resta del Gasto Real en vez de sumar). Solo 0 no tiene sentido.
+    if (!Number.isFinite(monto) || monto === 0) {
       setMensaje({
         tipo: "error",
-        texto: form.moneda === "PEN" ? "El monto en Soles debe ser mayor a 0." : "El monto en dólares debe ser mayor a 0.",
+        texto:
+          form.moneda === "PEN"
+            ? "El monto en Soles no puede ser 0 (usa negativo para un descuento o nota de crédito)."
+            : "El monto en dólares no puede ser 0 (usa negativo para un descuento o nota de crédito).",
       });
       return;
     }
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
     const montoUsd = form.moneda === "USD" ? monto : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+    const esDescuento = monto < 0;
     const descripcionMonto =
       form.moneda === "PEN"
         ? `S/ ${monto.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO}`
         : `${moneda2(monto)}`;
     const confirmado = window.confirm(
-      `¿Registrar factura de ${descripcionMonto} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? Esto suma ${moneda2(montoUsd)} al Gasto Real de ${mesTexto} en BD_CAPEX y agrega una fila en la hoja de facturas.`
+      `¿Registrar ${esDescuento ? "un descuento/nota de crédito" : "factura"} de ${descripcionMonto} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? Esto ${esDescuento ? "resta" : "suma"} ${moneda2(Math.abs(montoUsd))} al Gasto Real de ${mesTexto} en BD_CAPEX y agrega una fila en la hoja de facturas.`
     );
     if (!confirmado) return;
 
@@ -452,10 +458,10 @@ export default function Facturas() {
             <input
               type="number"
               step="0.01"
-              min="0"
               className="campo"
               value={form.monto}
               onChange={(e) => actualizarCampo("monto", e.target.value)}
+              placeholder="Negativo = descuento o nota de crédito"
               required
             />
             {montoUsdPrevio != null && (
@@ -894,7 +900,7 @@ function MontoFactura({
   async function guardar() {
     setEnfocado(false);
     const nuevo = Number(valorLocal);
-    if (!Number.isFinite(nuevo) || nuevo <= 0 || nuevo === factura.monto) {
+    if (!Number.isFinite(nuevo) || nuevo === 0 || nuevo === factura.monto) {
       setValorLocal(String(factura.monto));
       return;
     }
