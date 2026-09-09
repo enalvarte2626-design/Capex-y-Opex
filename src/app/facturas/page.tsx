@@ -206,7 +206,10 @@ export default function Facturas() {
     setForm((prev) => ({
       ...prev,
       filaProyecto: String(p.filaExcel),
-      responsable: prev.responsable || p.responsable,
+      // Siempre el Responsable de la fila elegida (no solo si estaba vacío) — así queda
+      // por defecto según el proyecto/detalle cada vez que se cambia la selección, y se
+      // puede seguir corrigiendo a mano después si hace falta.
+      responsable: p.responsable || prev.responsable,
     }));
   }
 
@@ -231,15 +234,7 @@ export default function Facturas() {
     form.moneda === "USD" && hayMontoValido ? Math.round(montoNum * TIPO_CAMBIO_POR_DEFECTO * 100) / 100 : null;
 
   function actualizarCampo(campo: keyof typeof form, valor: string) {
-    setForm((prev) => {
-      const siguiente = { ...prev, [campo]: valor };
-      // Al elegir proyecto, sugiere su Responsable si el campo aún está vacío.
-      if (campo === "filaProyecto") {
-        const p = datos?.proyectos.find((x) => String(x.filaExcel) === valor);
-        if (p && !prev.responsable) siguiente.responsable = p.responsable;
-      }
-      return siguiente;
-    });
+    setForm((prev) => ({ ...prev, [campo]: valor }));
   }
 
   async function registrar(e: React.FormEvent) {
