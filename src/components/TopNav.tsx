@@ -67,7 +67,7 @@ export default function TopNav({ local }: Props) {
           CONTROL DE GASTOS
         </span>
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1" aria-label="Módulos principales">
           {CATEGORIAS.map((cat) => {
             const activa = categoriaActiva === cat.clave;
             const Icono = cat.icono;
@@ -82,6 +82,7 @@ export default function TopNav({ local }: Props) {
                   color: activa ? "var(--acento-fuerte)" : "var(--texto-suave)",
                   borderBottom: activa ? "3px solid var(--acento)" : "3px solid transparent",
                 }}
+                aria-current={activa ? "page" : undefined}
               >
                 <Icono size={16} />
                 {cat.etiqueta}
@@ -92,7 +93,7 @@ export default function TopNav({ local }: Props) {
 
         <div className="w-px self-stretch my-2" style={{ background: "var(--borde)" }} />
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex items-center gap-1" aria-label="Navegación de la sección">
           {catActivaObj.enlaces.map((e) => {
             const enlaceActivo = pathname === e.href;
             return (
@@ -106,6 +107,7 @@ export default function TopNav({ local }: Props) {
                   color: enlaceActivo ? "var(--acento-fuerte)" : "var(--texto-suave)",
                   background: enlaceActivo ? "var(--acento-suave)" : "transparent",
                 }}
+                aria-current={enlaceActivo ? "page" : undefined}
               >
                 {e.etiqueta}
               </Link>
