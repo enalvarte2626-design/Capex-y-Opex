@@ -41,6 +41,9 @@ export async function GET() {
         detalle: p.detalle,
         grupoNegocio: p.grupoNegocio,
         responsable: p.responsable,
+        // "Sub. Negocio" de BD_CAPEX — es el código de empresa (ej. "NM", "CT") que ya
+        // se ve en Detalle BD_CAPEX, para autocompletar "Empresa (código)" al registrar.
+        subNegocio: p.subNegocio,
       })),
       facturas,
       actualizadoEn: new Date().toISOString(),

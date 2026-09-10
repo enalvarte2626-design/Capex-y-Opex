@@ -5,7 +5,7 @@ import { NOMBRES_MES_CIERRE, type FacturaCapex } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
-import { agruparProveedores } from "@/lib/proveedores";
+import { agruparProveedores, claveNormalizada, mapaRucPorProveedor } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
 
 interface ProyectoOpcion {
@@ -14,6 +14,8 @@ interface ProyectoOpcion {
   detalle: string;
   grupoNegocio: string;
   responsable: string;
+  /** "Sub. Negocio" de BD_CAPEX — el código de empresa (ej. "NM", "CT") de esa línea. */
+  subNegocio: string;
 }
 
 interface FacturaConResolucion extends FacturaCapex {
@@ -128,6 +130,14 @@ export default function Facturas() {
     [datos]
   );
 
+  // RUC más usado con cada proveedor ya registrado — para autocompletarlo apenas se
+  // elige un proveedor conocido. Uno nuevo (o sin RUC en ningún registro anterior) no
+  // aparece acá, así que el campo queda vacío para completarlo a mano.
+  const rucPorProveedor = useMemo(
+    () => mapaRucPorProveedor((datos?.facturas ?? []).map((f) => ({ proveedor: f.recurso, ruc: f.ruc }))),
+    [datos]
+  );
+
   // Grupos de Negocio disponibles — elegir uno acota tanto el Proyecto como el Detalle
   // de abajo (opcional: se puede saltar directo a buscar por Proyecto o Detalle).
   const grupos = useMemo(() => {
@@ -206,10 +216,11 @@ export default function Facturas() {
     setForm((prev) => ({
       ...prev,
       filaProyecto: String(p.filaExcel),
-      // Siempre el Responsable de la fila elegida (no solo si estaba vacío) — así queda
-      // por defecto según el proyecto/detalle cada vez que se cambia la selección, y se
-      // puede seguir corrigiendo a mano después si hace falta.
+      // Siempre el Responsable y la Empresa de la fila elegida (no solo si estaban
+      // vacíos) — así quedan por defecto según el proyecto/detalle cada vez que cambia
+      // la selección, y se pueden seguir corrigiendo a mano después si hace falta.
       responsable: p.responsable || prev.responsable,
+      proveedor: p.subNegocio || prev.proveedor,
     }));
   }
 
@@ -232,6 +243,19 @@ export default function Facturas() {
     form.moneda === "PEN" && hayMontoValido ? Math.round((montoNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100 : null;
   const montoSolesPrevio =
     form.moneda === "USD" && hayMontoValido ? Math.round(montoNum * TIPO_CAMBIO_POR_DEFECTO * 100) / 100 : null;
+
+  // Al elegir (o terminar de escribir) un Proveedor ya usado antes, autocompleta el RUC
+  // con el que más veces se registró para ese mismo proveedor. Un proveedor nuevo (o que
+  // nunca se registró con RUC) simplemente no tiene coincidencia — el campo queda vacío
+  // para completarlo a mano, tal como pide el flujo.
+  function cambiarProveedor(valor: string) {
+    const rucSugerido = rucPorProveedor.get(claveNormalizada(valor));
+    setForm((prev) => ({
+      ...prev,
+      recurso: valor,
+      ruc: rucSugerido ?? prev.ruc,
+    }));
+  }
 
   function actualizarCampo(campo: keyof typeof form, valor: string) {
     setForm((prev) => ({ ...prev, [campo]: valor }));
@@ -492,7 +516,7 @@ export default function Facturas() {
               list="proveedores-capex"
               className="campo"
               value={form.recurso}
-              onChange={(e) => actualizarCampo("recurso", e.target.value)}
+              onChange={(e) => cambiarProveedor(e.target.value)}
               placeholder="Elige uno ya usado o escribe uno nuevo"
             />
             <datalist id="proveedores-capex">

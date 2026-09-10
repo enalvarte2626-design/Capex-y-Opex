@@ -25,7 +25,9 @@ const SUFIJOS_EMPRESA = new Set([
   "CO",
 ]);
 
-function claveNormalizada(nombre: string): string {
+/** Exportada para que otros lugares (ej. la sugerencia de RUC por proveedor) agrupen con
+ *  el mismo criterio exacto que `agruparProveedores`. */
+export function claveNormalizada(nombre: string): string {
   const palabras = nombre.toLowerCase().replace(/\s+/g, " ").trim().split(" ");
   // Quita como mucho un sufijo de tipo de empresa al final ("Metrica Sac" -> "metrica"),
   // nunca deja el nombre vacío.
@@ -63,4 +65,36 @@ export function agruparProveedores(nombres: (string | undefined | null)[]): stri
     return mejor;
   });
   return resultado.sort((a, b) => a.localeCompare(b, "es"));
+}
+
+/**
+ * A partir de las facturas ya registradas, arma un mapa (proveedor normalizado -> RUC
+ * más usado con ese proveedor) — para sugerir el RUC en automático apenas se elige un
+ * proveedor ya conocido. Un proveedor nuevo (o uno que nunca se registró con RUC) no
+ * aparece en el mapa, así que el campo queda vacío para completarlo a mano.
+ */
+export function mapaRucPorProveedor(entradas: { proveedor: string | undefined | null; ruc: string | undefined | null }[]): Map<string, string> {
+  const conteoPorClave = new Map<string, Map<string, number>>();
+  for (const { proveedor, ruc } of entradas) {
+    const nombre = proveedor?.trim();
+    const rucLimpio = ruc?.trim();
+    if (!nombre || !rucLimpio) continue;
+    const clave = claveNormalizada(nombre);
+    const formas = conteoPorClave.get(clave) ?? new Map<string, number>();
+    formas.set(rucLimpio, (formas.get(rucLimpio) ?? 0) + 1);
+    conteoPorClave.set(clave, formas);
+  }
+  const resultado = new Map<string, string>();
+  for (const [clave, formas] of conteoPorClave) {
+    let mejor = "";
+    let mejorConteo = -1;
+    for (const [ruc, veces] of formas) {
+      if (veces > mejorConteo) {
+        mejor = ruc;
+        mejorConteo = veces;
+      }
+    }
+    resultado.set(clave, mejor);
+  }
+  return resultado;
 }
