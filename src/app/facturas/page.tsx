@@ -30,18 +30,12 @@ interface Respuesta {
 
 const HOY = () => new Date().toISOString().slice(0, 10);
 
-export default function Facturas() {
-  const nivelAcceso = useNivelAcceso();
-  const puedeEditar = nivelAcceso === "completo";
-  const [datos, setDatos] = useState<Respuesta | null>(null);
-  const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [grupoSel, setGrupoSel] = useState("");
-  const [proyectoNombreSel, setProyectoNombreSel] = useState("");
-  const [detalleTexto, setDetalleTexto] = useState("");
-  const [mostrarSugerenciasDetalle, setMostrarSugerenciasDetalle] = useState(false);
-
-  const [form, setForm] = useState({
+/** Mismo formulario "en blanco" tanto para el estado inicial como para limpiarlo por
+ *  completo después de cada registro — así no queda ningún campo pegado de la factura
+ *  anterior (Proyecto, Detalle, Responsable, Empresa, RUC, etc.), solo lo que ya viene
+ *  vacío por diseño (Mes y Periodo facturado quedan en "hoy", como es lo más común). */
+function formularioVacio() {
+  return {
     filaProyecto: "",
     mes: String(new Date().getMonth() + 1),
     // Por defecto en Soles SIN IGV (así llegan la mayoría de las facturas locales) — se
@@ -58,7 +52,21 @@ export default function Facturas() {
     // — se deja vacío sin problema para proveedores extranjeros.
     ruc: "",
     comentarioExtra: "",
-  });
+  };
+}
+
+export default function Facturas() {
+  const nivelAcceso = useNivelAcceso();
+  const puedeEditar = nivelAcceso === "completo";
+  const [datos, setDatos] = useState<Respuesta | null>(null);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [grupoSel, setGrupoSel] = useState("");
+  const [proyectoNombreSel, setProyectoNombreSel] = useState("");
+  const [detalleTexto, setDetalleTexto] = useState("");
+  const [mostrarSugerenciasDetalle, setMostrarSugerenciasDetalle] = useState(false);
+
+  const [form, setForm] = useState(formularioVacio);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [migrando, setMigrando] = useState(false);
@@ -319,13 +327,12 @@ export default function Facturas() {
         tipo: "ok",
         texto: `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`,
       });
-      setForm((prev) => ({
-        ...prev,
-        monto: "",
-        numeroFactura: "",
-        ruc: "",
-        comentarioExtra: "",
-      }));
+      // Limpia todo el formulario para el siguiente registro — nada debe quedar pegado
+      // de esta factura (Proyecto, Detalle, Responsable, Empresa, RUC, etc.).
+      setForm(formularioVacio());
+      setGrupoSel("");
+      setProyectoNombreSel("");
+      setDetalleTexto("");
       await cargar();
     } catch (e) {
       setMensaje({ tipo: "error", texto: (e as Error).message });

@@ -25,6 +25,25 @@ interface Respuesta {
   actualizadoEn: string;
 }
 
+/** Mismo formulario "en blanco" tanto para el estado inicial como para limpiarlo por
+ *  completo después de cada registro — así no queda ningún campo pegado de la factura
+ *  anterior. */
+function formularioVacio() {
+  return {
+    mes: String(new Date().getMonth() + 1),
+    // Por defecto en Soles SIN IGV (así llegan la mayoría de las facturas locales) — se
+    // puede cambiar a Dólares para proveedores que ya facturan en USD directo.
+    moneda: "PEN" as "PEN" | "USD",
+    monto: "",
+    proveedor: "",
+    numeroComprobante: "",
+    // Solo aplica a proveedores peruanos (el RUC es un identificador tributario de Perú)
+    // — se deja vacío sin problema para proveedores extranjeros.
+    ruc: "",
+    comentario: "",
+  };
+}
+
 export default function FacturasOpex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
@@ -41,19 +60,7 @@ export default function FacturasOpex() {
   const [subgrupoSel, setSubgrupoSel] = useState("");
   const [lineaSel, setLineaSel] = useState("");
 
-  const [form, setForm] = useState({
-    mes: String(new Date().getMonth() + 1),
-    // Por defecto en Soles SIN IGV (así llegan la mayoría de las facturas locales) — se
-    // puede cambiar a Dólares para proveedores que ya facturan en USD directo.
-    moneda: "PEN" as "PEN" | "USD",
-    monto: "",
-    proveedor: "",
-    numeroComprobante: "",
-    // Solo aplica a proveedores peruanos (el RUC es un identificador tributario de Perú)
-    // — se deja vacío sin problema para proveedores extranjeros.
-    ruc: "",
-    comentario: "",
-  });
+  const [form, setForm] = useState(formularioVacio);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
@@ -214,7 +221,13 @@ export default function FacturasOpex() {
           ? `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`
           : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? "No se modificó el Presupuesto 2026."}`,
       });
-      setForm((prev) => ({ ...prev, monto: "", numeroComprobante: "", ruc: "", comentario: "" }));
+      // Limpia todo el formulario para el siguiente registro — nada debe quedar pegado
+      // de esta factura (Empresa/Grupo/Subgrupo/Línea, Proveedor, RUC, etc.).
+      setForm(formularioVacio());
+      setEmpresaSel("");
+      setGrupoSel("");
+      setSubgrupoSel("");
+      setLineaSel("");
       await cargar();
     } catch (e) {
       setMensaje({ tipo: "error", texto: (e as Error).message });
