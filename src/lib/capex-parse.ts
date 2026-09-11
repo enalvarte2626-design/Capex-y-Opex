@@ -30,6 +30,13 @@ export const COL_FACTURAS = {
   // por un servicio de julio). Antes esta información solo vivía como texto "Periodo X"
   // dentro de Comentarios; ahora es su propia columna, más fácil de leer y de corregir.
   mesReal: 13, // N
+  // O y P: mismo criterio que montoSoles/tipoCambio, pero para facturas en Euros. Van
+  // aparte de esas dos (y no las reemplazan) porque `tipoCambio` (columna L) siempre
+  // guarda el tipo de cambio Soles↔Dólar — se sigue usando tal cual para mostrar el
+  // equivalente en Soles de CUALQUIER factura (incluida una en Euros); el tipo de
+  // cambio Euro↔Dólar es un dato aparte, solo aplica a facturas ingresadas en Euros.
+  montoEuros: 14, // O: Monto en Euros — solo cuando se ingresó en Euros
+  tipoCambioEur: 15, // P: Tipo de cambio Euro→Dólar usado para convertir esta factura
 } as const;
 
 export const ENCABEZADOS_NUEVOS_FACTURAS = [
@@ -39,6 +46,11 @@ export const ENCABEZADOS_NUEVOS_FACTURAS = [
   "RUC",
   "Mes Real",
 ];
+
+/** Encabezados agregados después de los anteriores (columnas O-P) — para facturas en
+ *  Euros. Se agregan por separado (mismo criterio: si la celda O1 ya tiene algo, no se
+ *  vuelve a escribir) porque este soporte se sumó en un cambio posterior. */
+export const ENCABEZADOS_MONTO_EUROS = ["Monto Euros", "Tipo de Cambio Euro"];
 
 const NOMBRES_MES_MIN = [
   "enero",
@@ -201,6 +213,11 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
     const mesRealTxt = fila[COL_FACTURAS.mesReal];
     const mesReal = mesRealTxt !== "" && mesRealTxt != null ? aNumero(mesRealTxt) || null : mesDesdeComentario(comentarios);
 
+    const montoEurosTxt = fila[COL_FACTURAS.montoEuros];
+    const tipoCambioEurTxt = fila[COL_FACTURAS.tipoCambioEur];
+    const montoEuros = montoEurosTxt !== "" && montoEurosTxt != null ? aNumero(montoEurosTxt) : null;
+    const tipoCambioEur = tipoCambioEurTxt !== "" && tipoCambioEurTxt != null ? aNumero(tipoCambioEurTxt) : null;
+
     facturas.push({
       filaExcel: i + 1,
       periodoFacturado: periodoTexto,
@@ -213,12 +230,14 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
       numeroFactura,
       registrado: aTexto(fila[COL_FACTURAS.registrado]),
       comentarios,
-      moneda: (aTexto(fila[COL_FACTURAS.moneda]) as "PEN" | "USD" | ""),
+      moneda: (aTexto(fila[COL_FACTURAS.moneda]) as "PEN" | "USD" | "EUR" | ""),
       montoSoles,
       montoSolesEsCalculado,
       tipoCambio: tipoCambioNum,
       ruc: aTexto(fila[COL_FACTURAS.ruc]),
       mesReal,
+      montoEuros,
+      tipoCambioEur,
     });
   }
   return facturas;

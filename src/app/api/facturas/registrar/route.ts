@@ -11,6 +11,7 @@ import {
 } from "@/lib/sharepoint";
 import {
   COL_BD,
+  ENCABEZADOS_MONTO_EUROS,
   ENCABEZADOS_NUEVOS_FACTURAS,
   extraerProyectos,
   fechaAExcelSerial,
@@ -19,7 +20,7 @@ import {
   ultimaFilaConDatosEscaneada,
 } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
-import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
+import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +30,9 @@ interface CuerpoRegistro {
   filaProyecto: number;
   mes: number; // 1-12
   /** En qué moneda ingresó la persona `monto` — "PEN" (sin IGV, se convierte acá a USD
-   *  con el tipo de cambio fijo de la app) o "USD" (ya viene en dólares, se usa tal cual). */
-  moneda: "PEN" | "USD";
+   *  con el tipo de cambio Soles↔Dólar de la app), "USD" (ya viene en dólares, se usa
+   *  tal cual) o "EUR" (se convierte con el tipo de cambio Euro↔Dólar de la app). */
+  moneda: "PEN" | "USD" | "EUR";
   /** El valor tal cual lo escribió la persona, en la moneda indicada por `moneda`. */
   monto: number;
   recurso: string;
@@ -76,19 +78,15 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
-  if (moneda !== "PEN" && moneda !== "USD") {
+  if (moneda !== "PEN" && moneda !== "USD" && moneda !== "EUR") {
     return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
   }
   // Negativo se permite a propósito: es como se registra un descuento o nota de crédito
   // (resta del Gasto Real en vez de sumar, más abajo). Solo 0 no tiene sentido.
   if (!Number.isFinite(montoIngresado) || montoIngresado === 0) {
+    const nombreMoneda = moneda === "PEN" ? "en Soles" : moneda === "EUR" ? "en Euros" : "en dólares";
     return NextResponse.json(
-      {
-        error:
-          moneda === "PEN"
-            ? "El monto en Soles no puede ser 0 (usa negativo para un descuento o nota de crédito)."
-            : "El monto en dólares no puede ser 0 (usa negativo para un descuento o nota de crédito).",
-      },
+      { error: `El monto ${nombreMoneda} no puede ser 0 (usa negativo para un descuento o nota de crédito).` },
       { status: 400 }
     );
   }
@@ -97,12 +95,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Periodo facturado inválido." }, { status: 400 });
   }
 
-  const tipoCambio = TIPO_CAMBIO_POR_DEFECTO;
+  const tipoCambio = TIPO_CAMBIO_POR_DEFECTO; // Soles↔Dólar — aplica siempre, sin importar la moneda ingresada
+  const tipoCambioEur = TIPO_CAMBIO_EUR_POR_DEFECTO; // Euro↔Dólar — solo aplica si moneda === "EUR"
   // El USD es siempre lo que de verdad mueve el Gasto Real. Si ya se ingresó en dólares,
-  // se usa tal cual; "Monto Soles (sin IGV)" solo se guarda cuando la factura de verdad
-  // se originó en Soles — mismo criterio que ya usa OPEX.
-  const monto = moneda === "USD" ? Math.round(montoIngresado * 100) / 100 : Math.round((montoIngresado / tipoCambio) * 100) / 100;
+  // se usa tal cual; en Soles se divide por el tipo de cambio Soles↔Dólar; en Euros se
+  // multiplica por el tipo de cambio Euro↔Dólar (1 EUR vale más que 1 USD). "Monto
+  // Soles"/"Monto Euros" solo se guardan cuando la factura de verdad se originó en esa
+  // moneda — mismo criterio que ya usa OPEX para Soles.
+  const monto =
+    moneda === "USD"
+      ? Math.round(montoIngresado * 100) / 100
+      : moneda === "EUR"
+        ? Math.round(montoIngresado * tipoCambioEur * 100) / 100
+        : Math.round((montoIngresado / tipoCambio) * 100) / 100;
   const montoSoles = moneda === "PEN" ? montoIngresado : null;
+  const montoEuros = moneda === "EUR" ? montoIngresado : null;
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
@@ -120,9 +127,13 @@ export async function POST(request: Request) {
 
     // 2) Si la hoja de facturas todavía no tiene las columnas J-N (Moneda/Monto
     //    Soles/Tipo de Cambio/RUC/Mes Real), agrega los encabezados una sola vez — nunca
-    //    corre ninguna columna existente.
+    //    corre ninguna columna existente. O-P (Monto Euros/Tipo de Cambio Euro) se
+    //    agregaron después, por eso se revisan aparte.
     if (!leerCeldaCruda(wb, HOJA_FACTURAS, "J1")) {
       await escribirFila(config, archivo, HOJA_FACTURAS, 1, "J", "N", ENCABEZADOS_NUEVOS_FACTURAS);
+    }
+    if (!leerCeldaCruda(wb, HOJA_FACTURAS, "O1")) {
+      await escribirFila(config, archivo, HOJA_FACTURAS, 1, "O", "P", ENCABEZADOS_MONTO_EUROS);
     }
 
     // 3) Agrega la factura al final de la hoja de facturas. El mes al que pertenece el
@@ -130,7 +141,7 @@ export async function POST(request: Request) {
     //    su propia columna (Mes Real), así Comentarios queda libre para notas reales.
     const ultimaFila = ultimaFilaConDatosEscaneada(wb, HOJA_FACTURAS);
     const filaNueva = ultimaFila + 1;
-    await escribirFila(config, archivo, HOJA_FACTURAS, filaNueva, "A", "N", [
+    await escribirFila(config, archivo, HOJA_FACTURAS, filaNueva, "A", "P", [
       fechaAExcelSerial(fecha),
       recurso,
       proveedor,
@@ -145,6 +156,8 @@ export async function POST(request: Request) {
       tipoCambio,
       ruc?.trim() ?? "",
       mes,
+      montoEuros ?? "",
+      moneda === "EUR" ? tipoCambioEur : "",
     ]);
 
     // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en BD_CAPEX (no
@@ -161,6 +174,8 @@ export async function POST(request: Request) {
       monto,
       montoSoles,
       tipoCambio,
+      montoEuros,
+      tipoCambioEur: moneda === "EUR" ? tipoCambioEur : null,
       celdaActualizada: `${hojaProyectos}!${direccionReal}`,
       gastoRealAnterior: valorActual,
       gastoRealNuevo: nuevoValor,

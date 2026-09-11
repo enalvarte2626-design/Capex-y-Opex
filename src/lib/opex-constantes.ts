@@ -16,6 +16,11 @@
  */
 export const TIPO_CAMBIO_POR_DEFECTO = 3.4;
 
+/** Tipo de cambio por defecto EUR→USD — mismo criterio y mismo motivo que
+ *  `TIPO_CAMBIO_POR_DEFECTO` (sin "use client", para que server y cliente lo importen
+ *  del mismo lugar sin cruzar el límite de compilación de Next). 1 EUR ≈ 1.10 USD. */
+export const TIPO_CAMBIO_EUR_POR_DEFECTO = 1.1;
+
 /**
  * Mes de cierre (1-12): el último mes con Gasto Real ya cerrado de verdad — de ahí en
  * adelante (mes de cierre + 1 en adelante) todavía está abierto y una factura nueva SÍ

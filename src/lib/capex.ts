@@ -50,23 +50,30 @@ export interface FacturaCapex {
   numeroFactura: string;
   registrado: string;
   comentarios: string;
-  /** "PEN" o "USD": en qué moneda ingresó la persona el monto — vacío en facturas
-   *  registradas antes de que existiera el selector de moneda (esas siempre fueron el
-   *  monto ya en USD, tal como pedía el formulario anterior). */
-  moneda: "PEN" | "USD" | "";
+  /** "PEN", "USD" o "EUR": en qué moneda ingresó la persona el monto — vacío en
+   *  facturas registradas antes de que existiera el selector de moneda (esas siempre
+   *  fueron el monto ya en USD, tal como pedía el formulario anterior). */
+  moneda: "PEN" | "USD" | "EUR" | "";
   /** Equivalente en Soles sin IGV — si la factura se ingresó en Soles, es el valor real
-   *  que escribió la persona; si se ingresó en Dólares, es un cálculo de referencia
-   *  (monto USD × tipoCambio DE ESA FILA) para que el reporte siempre muestre ambas
-   *  monedas. `null` en facturas de antes de este campo. */
+   *  que escribió la persona; si se ingresó en Dólares o Euros, es un cálculo de
+   *  referencia (monto USD × tipoCambio DE ESA FILA) para que el reporte siempre muestre
+   *  ambas monedas. `null` en facturas de antes de este campo. */
   montoSoles: number | null;
-  /** true si `montoSoles` es un cálculo de referencia (factura ingresada en USD), no el
-   *  valor que la persona realmente escribió. */
+  /** true si `montoSoles` es un cálculo de referencia (factura ingresada en USD o
+   *  Euros), no el valor que la persona realmente escribió. */
   montoSolesEsCalculado: boolean;
-  /** Tipo de cambio usado para convertir ESTA factura en particular — se guarda por fila
-   *  para que el historial sea fiel aunque el tipo de cambio por defecto cambie después. */
+  /** Tipo de cambio Soles↔Dólar usado para el equivalente en Soles de ESTA factura en
+   *  particular — se guarda por fila para que el historial sea fiel aunque el tipo de
+   *  cambio por defecto cambie después. Aplica a cualquier factura (PEN, USD o EUR). */
   tipoCambio: number | null;
   /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
   ruc: string;
+  /** Monto en Euros tal como lo escribió la persona — solo cuando la factura se
+   *  ingresó en Euros; `null` en cualquier otro caso. */
+  montoEuros: number | null;
+  /** Tipo de cambio Euro→Dólar usado para convertir ESTA factura en particular — solo
+   *  cuando se ingresó en Euros; `null` en cualquier otro caso. */
+  tipoCambioEur: number | null;
   /** Mes (1-12) al que de verdad pertenece el gasto para el presupuesto — puede ser
    *  distinto al mes de `periodoFacturado` (ej. factura emitida en agosto por un
    *  servicio de julio). `null` solo si ni la columna "Mes Real" ni el viejo texto
