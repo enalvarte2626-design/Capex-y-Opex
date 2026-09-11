@@ -15,13 +15,18 @@ import {
 import {
   COL_PPTO_OPEX,
   ENCABEZADOS_FACTURAS_OPEX,
+  ENCABEZADOS_MONTO_EUROS_OPEX,
   extraerFacturasOpex,
   extraerPresupuestoOpex,
 } from "@/lib/opex-parse";
 import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
-import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
+import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
 import { leerMesCierre } from "@/lib/mesCierreConfig";
+
+/** Encabezados completos de la hoja de facturas, incluido el soporte de Euros agregado
+ *  después — se usan juntos para crear/ensanchar la Tabla de Excel de una sola vez. */
+const ENCABEZADOS_FACTURAS_OPEX_COMPLETO = [...ENCABEZADOS_FACTURAS_OPEX, ...ENCABEZADOS_MONTO_EUROS_OPEX];
 
 export const dynamic = "force-dynamic";
 
@@ -64,8 +69,9 @@ interface CuerpoRegistro {
   filaPresupuesto: number;
   mes: number; // 1-12
   /** En qué moneda ingresó la persona `monto` — "PEN" (Soles sin IGV, se convierte acá
-   *  a USD) o "USD" (ya viene en dólares, se usa tal cual). */
-  moneda: "PEN" | "USD";
+   *  a USD), "USD" (ya viene en dólares, se usa tal cual) o "EUR" (se convierte con el
+   *  tipo de cambio Euro→Dólar de la app). */
+  moneda: "PEN" | "USD" | "EUR";
   /** El valor tal cual lo escribió la persona, en la moneda indicada por `moneda`. */
   monto: number;
   proveedor: string;
@@ -112,19 +118,15 @@ export async function POST(request: Request) {
   if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
-  if (moneda !== "PEN" && moneda !== "USD") {
+  if (moneda !== "PEN" && moneda !== "USD" && moneda !== "EUR") {
     return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
   }
   // Negativo se permite a propósito: es como se registra un descuento o nota de crédito
   // (resta del Gasto Real en vez de sumar, más abajo). Solo 0 no tiene sentido.
   if (!Number.isFinite(montoIngresado) || montoIngresado === 0) {
+    const nombreMoneda = moneda === "PEN" ? "en Soles" : moneda === "EUR" ? "en Euros" : "en dólares";
     return NextResponse.json(
-      {
-        error:
-          moneda === "PEN"
-            ? "El monto en Soles no puede ser 0 (usa negativo para un descuento o nota de crédito)."
-            : "El monto en dólares no puede ser 0 (usa negativo para un descuento o nota de crédito).",
-      },
+      { error: `El monto ${nombreMoneda} no puede ser 0 (usa negativo para un descuento o nota de crédito).` },
       { status: 400 }
     );
   }
@@ -132,19 +134,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Falta el Proveedor." }, { status: 400 });
   }
 
-  const tipoCambio = TIPO_CAMBIO_POR_DEFECTO;
-  if (!Number.isFinite(tipoCambio) || tipoCambio <= 0) {
-    // No debería pasar nunca (es una constante fija), pero si algún día vuelve a
+  const tipoCambio = TIPO_CAMBIO_POR_DEFECTO; // Soles↔Dólar — aplica siempre, sin importar la moneda ingresada
+  const tipoCambioEur = TIPO_CAMBIO_EUR_POR_DEFECTO; // Euro↔Dólar — solo aplica si moneda === "EUR"
+  if (!Number.isFinite(tipoCambio) || tipoCambio <= 0 || !Number.isFinite(tipoCambioEur) || tipoCambioEur <= 0) {
+    // No debería pasar nunca (son constantes fijas), pero si algún día vuelven a
     // resolverse mal en el bundle del servidor, mejor fallar fuerte acá que guardar un
     // Monto (USD) en null/0 sin que nadie se entere.
     return NextResponse.json({ error: "Tipo de cambio inválido en el servidor." }, { status: 500 });
   }
   // El USD es siempre lo que de verdad mueve el Gasto Real. Si la persona ya ingresó en
-  // dólares, se usa tal cual (sin dividir de nuevo por el tipo de cambio); el "Monto
-  // Soles (sin IGV)" solo se guarda cuando la factura de verdad se originó en Soles —
-  // no tiene sentido inventar un equivalente en Soles para una factura que ya vino en USD.
-  const monto = moneda === "USD" ? Math.round(montoIngresado * 100) / 100 : Math.round((montoIngresado / tipoCambio) * 100) / 100;
+  // dólares, se usa tal cual; en Soles se divide por el tipo de cambio Soles↔Dólar; en
+  // Euros se multiplica por el tipo de cambio Euro↔Dólar (1 EUR vale más que 1 USD).
+  // "Monto Soles"/"Monto Euros" solo se guardan cuando la factura de verdad se originó
+  // en esa moneda — no tiene sentido inventar un equivalente para una que ya vino en USD.
+  const monto =
+    moneda === "USD"
+      ? Math.round(montoIngresado * 100) / 100
+      : moneda === "EUR"
+        ? Math.round(montoIngresado * tipoCambioEur * 100) / 100
+        : Math.round((montoIngresado / tipoCambio) * 100) / 100;
   const montoSoles = moneda === "PEN" ? montoIngresado : null;
+  const montoEuros = moneda === "EUR" ? montoIngresado : null;
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
@@ -180,15 +190,15 @@ export async function POST(request: Request) {
         hojaFacturas,
         1,
         "A",
-        columnaALetra(ENCABEZADOS_FACTURAS_OPEX.length - 1),
-        ENCABEZADOS_FACTURAS_OPEX
+        columnaALetra(ENCABEZADOS_FACTURAS_OPEX_COMPLETO.length - 1),
+        ENCABEZADOS_FACTURAS_OPEX_COMPLETO
       );
     }
     // Asegura que la hoja tenga una Tabla de Excel real antes de agregar la fila — ver
     // el comentario de `agregarFilaTabla` en sharepoint.ts sobre por qué esto reemplaza
     // el cálculo manual de "última fila + 1" (tenía una condición de carrera real: dos
     // facturas registradas seguidas podían pisarse entre sí en la misma fila).
-    await asegurarTablaEnHoja(config, archivo, hojaFacturas, ENCABEZADOS_FACTURAS_OPEX);
+    await asegurarTablaEnHoja(config, archivo, hojaFacturas, ENCABEZADOS_FACTURAS_OPEX_COMPLETO);
     await agregarFilaTabla(config, archivo, hojaFacturas, [
       fechaAExcelSerial(new Date()),
       linea.grupoNegocio,
@@ -207,6 +217,8 @@ export async function POST(request: Request) {
       linea.subNegocio,
       moneda,
       ruc?.trim() ?? "",
+      montoEuros ?? "",
+      moneda === "EUR" ? tipoCambioEur : "",
     ]);
 
     // Un mes pasado queda solo en el historial — nunca toca Presupuesto 2026.

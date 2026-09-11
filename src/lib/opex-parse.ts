@@ -48,8 +48,15 @@ export const COL_FACTURAS_OPEX = {
   montoSoles: 12, // Monto en Soles sin IGV — solo cuando la factura se ingresó en Soles
   tipoCambio: 13, // Tipo de cambio usado para convertir esta factura en particular
   empresa: 14, // Empresa de la línea de gasto elegida (viene de Presupuesto 2026)
-  moneda: 15, // "PEN" o "USD" — en qué moneda se ingresó originalmente el monto
+  moneda: 15, // "PEN", "USD" o "EUR" — en qué moneda se ingresó originalmente el monto
   ruc: 16, // RUC del proveedor (solo aplica a proveedores peruanos) — opcional
+  // 17 y 18: mismo criterio que montoSoles/tipoCambio, pero para facturas en Euros. Van
+  // aparte (no las reemplazan) porque `tipoCambio` (columna 13) siempre guarda el tipo
+  // de cambio Soles↔Dólar — se sigue usando tal cual para mostrar el equivalente en
+  // Soles de CUALQUIER factura (incluida una en Euros); el tipo de cambio Euro↔Dólar es
+  // un dato aparte, solo aplica a facturas ingresadas en Euros.
+  montoEuros: 17, // Monto en Euros — solo cuando se ingresó en Euros
+  tipoCambioEur: 18, // Tipo de cambio Euro→Dólar usado para convertir esta factura
 } as const;
 
 export const ENCABEZADOS_FACTURAS_OPEX = [
@@ -71,6 +78,12 @@ export const ENCABEZADOS_FACTURAS_OPEX = [
   "Moneda ingresada",
   "RUC",
 ];
+
+/** Encabezados agregados después de los anteriores (columnas 17-18) — para facturas en
+ *  Euros. Se agregan por separado (mismo criterio: si la celda de esa columna en la
+ *  fila 1 ya tiene algo, no se vuelve a escribir) porque este soporte se sumó en un
+ *  cambio posterior. */
+export const ENCABEZADOS_MONTO_EUROS_OPEX = ["Monto Euros", "Tipo de Cambio Euro"];
 
 /** Serial de Excel (días desde 1899-12-30) → Date — el inverso de `fechaAExcelSerial` de
  *  capex-parse.ts. Hace falta porque las fechas que escribe la app (número plano, sin
@@ -185,13 +198,19 @@ export interface FacturaOpex {
   tipoCambio: number | null;
   /** Empresa de la línea de gasto — vacío en facturas registradas antes de este campo. */
   empresa: string;
-  /** "PEN" o "USD": en qué moneda ingresó la persona el monto — vacío en facturas
-   *  registradas antes de que existiera el selector de moneda (esas siempre fueron en
-   *  Soles, es la única moneda que aceptaba el formulario en ese momento). */
-  moneda: "PEN" | "USD" | "";
+  /** "PEN", "USD" o "EUR": en qué moneda ingresó la persona el monto — vacío en
+   *  facturas registradas antes de que existiera el selector de moneda (esas siempre
+   *  fueron en Soles, es la única moneda que aceptaba el formulario en ese momento). */
+  moneda: "PEN" | "USD" | "EUR" | "";
   /** RUC del proveedor — vacío si no se conoce o si el proveedor no es peruano (el RUC
    *  es un identificador tributario solo de empresas registradas en Perú). */
   ruc: string;
+  /** Monto en Euros tal como lo escribió la persona — solo cuando la factura se
+   *  ingresó en Euros; `null` en cualquier otro caso. */
+  montoEuros: number | null;
+  /** Tipo de cambio Euro→Dólar usado para convertir ESTA factura en particular — solo
+   *  cuando se ingresó en Euros; `null` en cualquier otro caso. */
+  tipoCambioEur: number | null;
 }
 
 /** Extrae "Facturas Opex - App" — si la hoja todavía no existe (nadie ha registrado
@@ -250,6 +269,11 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       montoSolesEsCalculado = true;
     }
 
+    const montoEurosTxt = fila[COL_FACTURAS_OPEX.montoEuros];
+    const tipoCambioEurTxt = fila[COL_FACTURAS_OPEX.tipoCambioEur];
+    const montoEuros = montoEurosTxt !== "" && montoEurosTxt != null ? aNumero(montoEurosTxt) : null;
+    const tipoCambioEur = tipoCambioEurTxt !== "" && tipoCambioEurTxt != null ? aNumero(tipoCambioEurTxt) : null;
+
     facturas.push({
       filaExcel: i + 1,
       fecha,
@@ -268,8 +292,10 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
       montoSolesEsCalculado,
       tipoCambio: tipoCambioNum,
       empresa: aTexto(fila[COL_FACTURAS_OPEX.empresa]),
-      moneda: (aTexto(fila[COL_FACTURAS_OPEX.moneda]) as "PEN" | "USD" | ""),
+      moneda: (aTexto(fila[COL_FACTURAS_OPEX.moneda]) as "PEN" | "USD" | "EUR" | ""),
       ruc: aTexto(fila[COL_FACTURAS_OPEX.ruc]),
+      montoEuros,
+      tipoCambioEur,
     });
   }
   return facturas;

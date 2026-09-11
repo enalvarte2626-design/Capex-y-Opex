@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
-import { TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
+import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import { agruparProveedores } from "@/lib/proveedores";
@@ -32,8 +32,8 @@ function formularioVacio() {
   return {
     mes: String(new Date().getMonth() + 1),
     // Por defecto en Soles SIN IGV (así llegan la mayoría de las facturas locales) — se
-    // puede cambiar a Dólares para proveedores que ya facturan en USD directo.
-    moneda: "PEN" as "PEN" | "USD",
+    // puede cambiar a Dólares (proveedores que ya facturan en USD) o Euros.
+    moneda: "PEN" as "PEN" | "USD" | "EUR",
     monto: "",
     proveedor: "",
     numeroComprobante: "",
@@ -70,10 +70,24 @@ export default function FacturasOpex() {
   // que se muestra es el de Soles (al revés que cuando se ingresa en Soles).
   const montoNum = Number(form.monto);
   const hayMontoValido = Number.isFinite(montoNum) && montoNum !== 0;
-  const montoUsdPrevio =
-    form.moneda === "PEN" && hayMontoValido ? Math.round((montoNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100 : null;
-  const montoSolesPrevio =
-    form.moneda === "USD" && hayMontoValido ? Math.round(montoNum * TIPO_CAMBIO_POR_DEFECTO * 100) / 100 : null;
+  // El equivalente en USD solo aplica cuando se ingresó en Soles o en Euros (si ya se
+  // ingresó en Dólares, el propio monto ya es eso).
+  const montoUsdPrevio = !hayMontoValido
+    ? null
+    : form.moneda === "PEN"
+      ? Math.round((montoNum / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100
+      : form.moneda === "EUR"
+        ? Math.round(montoNum * TIPO_CAMBIO_EUR_POR_DEFECTO * 100) / 100
+        : null;
+  // El equivalente en Soles es siempre sobre el USD ya convertido (para Euros, encadena
+  // Euro→Dólar→Soles) — así se puede ver de un vistazo cómo queda en las 3 monedas.
+  const montoSolesPrevio = !hayMontoValido
+    ? null
+    : form.moneda === "USD"
+      ? Math.round(montoNum * TIPO_CAMBIO_POR_DEFECTO * 100) / 100
+      : form.moneda === "EUR" && montoUsdPrevio != null
+        ? Math.round(montoUsdPrevio * TIPO_CAMBIO_POR_DEFECTO * 100) / 100
+        : null;
 
   function actualizarFacturaLocal(filaExcel: number, cambios: Partial<FacturaOpex>) {
     setDatos((prev) =>
@@ -166,12 +180,10 @@ export default function FacturasOpex() {
     // Negativo se permite a propósito: es como se registra un descuento o nota de
     // crédito (resta del Gasto Real en vez de sumar). Solo 0 no tiene sentido.
     if (!Number.isFinite(monto) || monto === 0) {
+      const nombreMoneda = form.moneda === "PEN" ? "en Soles" : form.moneda === "EUR" ? "en Euros" : "en dólares";
       setMensaje({
         tipo: "error",
-        texto:
-          form.moneda === "PEN"
-            ? "El monto en Soles no puede ser 0 (usa negativo para un descuento o nota de crédito)."
-            : "El monto en dólares no puede ser 0 (usa negativo para un descuento o nota de crédito).",
+        texto: `El monto ${nombreMoneda} no puede ser 0 (usa negativo para un descuento o nota de crédito).`,
       });
       return;
     }
@@ -181,13 +193,20 @@ export default function FacturasOpex() {
     }
 
     const mesTexto = NOMBRES_MES_CIERRE[Number(form.mes) - 1];
-    const montoUsd = form.moneda === "USD" ? monto : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
+    const montoUsd =
+      form.moneda === "USD"
+        ? monto
+        : form.moneda === "EUR"
+          ? Math.round(monto * TIPO_CAMBIO_EUR_POR_DEFECTO * 100) / 100
+          : Math.round((monto / TIPO_CAMBIO_POR_DEFECTO) * 100) / 100;
     const esMesPasado = Number(form.mes) <= mesCierre;
     const esDescuento = monto < 0;
     const descripcionMonto =
       form.moneda === "PEN"
         ? `S/ ${monto.toFixed(2)} (sin IGV) — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_POR_DEFECTO}`
-        : `${moneda2(monto)}`;
+        : form.moneda === "EUR"
+          ? `€ ${monto.toFixed(2)} — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_EUR_POR_DEFECTO}`
+          : `${moneda2(monto)}`;
     const confirmado = window.confirm(
       `¿Registrar ${esDescuento ? "un descuento/nota de crédito" : "factura"} de ${descripcionMonto} para "${lineaElegida.lineaGasto}", período ${mesTexto}? ` +
         (esMesPasado
@@ -355,14 +374,17 @@ export default function FacturasOpex() {
             <select
               className="campo"
               value={form.moneda}
-              onChange={(e) => setForm((p) => ({ ...p, moneda: e.target.value as "PEN" | "USD" }))}
+              onChange={(e) => setForm((p) => ({ ...p, moneda: e.target.value as "PEN" | "USD" | "EUR" }))}
             >
               <option value="PEN">Soles (sin IGV)</option>
               <option value="USD">Dólares (USD)</option>
+              <option value="EUR">Euros (EUR)</option>
             </select>
           </div>
           <div>
-            <label className="etiqueta">{form.moneda === "PEN" ? "Monto en Soles (sin IGV)" : "Monto en Dólares (USD)"}</label>
+            <label className="etiqueta">
+              {form.moneda === "PEN" ? "Monto en Soles (sin IGV)" : form.moneda === "EUR" ? "Monto en Euros (EUR)" : "Monto en Dólares (USD)"}
+            </label>
             <input
               type="number"
               step="0.01"
@@ -374,7 +396,7 @@ export default function FacturasOpex() {
             />
             {montoUsdPrevio != null && (
               <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
-                ≈ {moneda2(montoUsdPrevio)} al tipo de cambio {TIPO_CAMBIO_POR_DEFECTO}
+                ≈ {moneda2(montoUsdPrevio)} al tipo de cambio {form.moneda === "EUR" ? TIPO_CAMBIO_EUR_POR_DEFECTO : TIPO_CAMBIO_POR_DEFECTO}
               </p>
             )}
             {montoSolesPrevio != null && (
@@ -529,11 +551,23 @@ export default function FacturasOpex() {
                   <td
                     className="py-1.5 pr-3 text-right text-xs"
                     style={{ color: "var(--texto-suave)" }}
-                    title={f.montoSolesEsCalculado ? "Factura ingresada en Dólares — equivalente en Soles solo de referencia" : undefined}
+                    title={
+                      f.moneda === "EUR"
+                        ? "Factura ingresada en Euros — equivalente en Soles solo de referencia"
+                        : f.montoSolesEsCalculado
+                          ? "Factura ingresada en Dólares — equivalente en Soles solo de referencia"
+                          : undefined
+                    }
                   >
                     {f.montoSoles != null
                       ? `${f.montoSolesEsCalculado ? "≈ " : ""}S/ ${f.montoSoles.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${f.tipoCambio ? ` (TC ${f.tipoCambio})` : ""}`
                       : "—"}
+                    {f.moneda === "EUR" && f.montoEuros != null && (
+                      <div>
+                        € {f.montoEuros.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {f.tipoCambioEur ? ` (TC ${f.tipoCambioEur})` : ""}
+                      </div>
+                    )}
                   </td>
                   <td className="py-1.5 pr-3">
                     <CampoEditable
