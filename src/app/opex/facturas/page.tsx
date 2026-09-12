@@ -6,7 +6,7 @@ import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
-import { agruparProveedores } from "@/lib/proveedores";
+import { agruparProveedores, claveNormalizada, mapaRucPorProveedor } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
 import type { FacturaOpex } from "@/lib/opex-parse";
 
@@ -132,6 +132,14 @@ export default function FacturasOpex() {
     [datos]
   );
 
+  // RUC más usado con cada proveedor ya registrado — para autocompletarlo apenas se
+  // elige un proveedor conocido. Uno nuevo (o sin RUC en ningún registro anterior) no
+  // aparece acá, así que el campo queda vacío para completarlo a mano.
+  const rucPorProveedor = useMemo(
+    () => mapaRucPorProveedor((datos?.facturas ?? []).map((f) => ({ proveedor: f.proveedor, ruc: f.ruc }))),
+    [datos]
+  );
+
   const empresas = useMemo(() => Array.from(new Set((datos?.lineas ?? []).map((l) => l.empresa).filter(Boolean))).sort(), [datos]);
 
   const grupos = useMemo(() => {
@@ -169,6 +177,19 @@ export default function FacturasOpex() {
   }, [subgrupoSel]);
 
   const lineaElegida = datos?.lineas.find((l) => String(l.filaExcel) === lineaSel);
+
+  // Al elegir (o terminar de escribir) un Proveedor ya usado antes, autocompleta el RUC
+  // con el que más veces se registró para ese mismo proveedor. Un proveedor nuevo (o que
+  // nunca se registró con RUC) simplemente no tiene coincidencia — el campo queda vacío
+  // para completarlo a mano.
+  function cambiarProveedor(valor: string) {
+    const rucSugerido = rucPorProveedor.get(claveNormalizada(valor));
+    setForm((prev) => ({
+      ...prev,
+      proveedor: valor,
+      ruc: rucSugerido ?? prev.ruc,
+    }));
+  }
 
   async function registrar(e: React.FormEvent) {
     e.preventDefault();
@@ -413,7 +434,7 @@ export default function FacturasOpex() {
               list="proveedores-conocidos"
               className="campo"
               value={form.proveedor}
-              onChange={(e) => setForm((p) => ({ ...p, proveedor: e.target.value }))}
+              onChange={(e) => cambiarProveedor(e.target.value)}
               placeholder="Elige uno ya usado o escribe uno nuevo"
               required
             />
