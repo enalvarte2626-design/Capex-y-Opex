@@ -471,6 +471,8 @@ export default function DashboardCapex() {
         </div>
       </div>
 
+      <AdvertenciasDatosSection proyectos={filtrados} />
+
       <EstadoProyectosPorGrupoSection proyectos={filtrados} />
 
       {/* Lado a lado en pantallas grandes para comparar de un vistazo — cada tabla
@@ -508,6 +510,75 @@ export default function DashboardCapex() {
         mostrarSoles={mostrarSoles}
         tipoCambio={tipoCambio}
       />
+    </div>
+  );
+}
+
+/**
+ * Avisa de problemas reales en los datos crudos de BD_CAPEX que hoy quedan invisibles: una
+ * celda con un error de fórmula (#REF!, #VALUE!...) que se cuenta como $0 sin que nadie se
+ * entere, o un mes cuyo Gasto Real/Proyectado sale desproporcionado frente al Presupuesto
+ * Aprobado — típico de una fórmula que suma de más. Ver lib/validacionPresupuesto.ts.
+ */
+function AdvertenciasDatosSection({ proyectos }: { proyectos: ProyectoResuelto[] }) {
+  const conAdvertencias = useMemo(
+    () => proyectos.filter((l) => l.advertencias.length > 0),
+    [proyectos]
+  );
+  const [abierto, setAbierto] = useState(false);
+
+  if (conAdvertencias.length === 0) return null;
+
+  return (
+    <div className="card p-4" style={{ background: "#fbe1ec", border: `1px solid ${ROSA_TEMPLATE}` }}>
+      <button type="button" className="flex items-center gap-3 w-full text-left" onClick={() => setAbierto(true)}>
+        <span className="text-2xl font-bold" style={{ color: ROSA_TEMPLATE }}>
+          ⚠ {conAdvertencias.length}
+        </span>
+        <span className="text-sm font-semibold" style={{ color: ROSA_TEMPLATE }}>
+          {conAdvertencias.length === 1 ? "línea con un posible error en el Excel" : "líneas con posibles errores en el Excel"}
+          {" — toca para ver el detalle"}
+        </span>
+      </button>
+
+      {abierto && (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-6"
+          style={{ background: "rgba(0,0,0,0.4)", zIndex: 50 }}
+          onClick={() => setAbierto(false)}
+        >
+          <div
+            className="card p-4 w-full flex flex-col"
+            style={{ maxWidth: 900, maxHeight: "85vh", background: "var(--card)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <h2 className="font-semibold">Posibles errores en el Excel ({conAdvertencias.length} líneas)</h2>
+              <button
+                className="text-xl leading-none px-2"
+                style={{ color: "var(--texto-suave)" }}
+                onClick={() => setAbierto(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ overflow: "auto" }}>
+              {conAdvertencias.map((l) => (
+                <div key={l.filaExcel} className="mb-3 pb-3" style={{ borderBottom: "1px solid var(--borde)" }}>
+                  <p className="font-semibold text-sm">
+                    {l.grupoNegocio} — {l.proyecto}
+                  </p>
+                  <ul className="text-xs mt-1 ml-4" style={{ color: ROSA_TEMPLATE, listStyle: "disc" }}>
+                    {l.advertencias.map((a, i) => (
+                      <li key={i}>{a}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

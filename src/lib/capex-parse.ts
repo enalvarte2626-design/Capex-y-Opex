@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import type { FacturaCapex, ItemConMeses, ProyectoCapex } from "./capex";
 import { TIPO_CAMBIO_POR_DEFECTO } from "./opex-constantes";
+import { detectarAdvertencias } from "./validacionPresupuesto";
 
 /**
  * Índices de columna (0-based) dentro de "Control de Facturas-Capex 25fEB".
@@ -268,12 +269,18 @@ export function extraerProyectos(wb: XLSX.WorkBook, nombreHoja: string): Proyect
 
     const real: number[] = [];
     const proyectado: number[] = [];
+    const realCrudo: unknown[] = [];
+    const proyectadoCrudo: unknown[] = [];
     for (let m = 0; m < 12; m++) {
       const colReal = COL_BD.primerMesReal + m * 2;
       const colProy = colReal + 1;
+      realCrudo.push(fila[colReal]);
+      proyectadoCrudo.push(fila[colProy]);
       real.push(aNumero(fila[colReal]));
       proyectado.push(aNumero(fila[colProy]));
     }
+    const presupuestoAprobadoCrudo = fila[COL_BD.presupuestoAprobado];
+    const presupuestoAprobado = aNumero(presupuestoAprobadoCrudo);
 
     proyectos.push({
       filaExcel: i + 1, // filas[i] es la fila (i+1) de la hoja (1-based, header en la fila 1)
@@ -292,7 +299,15 @@ export function extraerProyectos(wb: XLSX.WorkBook, nombreHoja: string): Proyect
       tiempo: aTexto(fila[COL_BD.tiempo]),
       real,
       proyectado,
-      presupuestoAprobado: aNumero(fila[COL_BD.presupuestoAprobado]),
+      presupuestoAprobado,
+      advertencias: detectarAdvertencias({
+        realCrudo,
+        proyectadoCrudo,
+        presupuestoAprobadoCrudo,
+        real,
+        proyectado,
+        presupuestoAprobado,
+      }),
     });
   }
   return proyectos;

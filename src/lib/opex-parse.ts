@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import type { ProyectoCapex } from "./capex";
 import { TIPO_CAMBIO_POR_DEFECTO } from "./opex-constantes";
+import { detectarAdvertencias } from "./validacionPresupuesto";
 
 /**
  * Índices de columna (0-based) de "Presupuesto 2026" — el equivalente a BD_CAPEX para
@@ -138,12 +139,18 @@ export function extraerPresupuestoOpex(wb: XLSX.WorkBook, nombreHoja: string): P
 
     const real: number[] = [];
     const proyectado: number[] = [];
+    const realCrudo: unknown[] = [];
+    const proyectadoCrudo: unknown[] = [];
     for (let m = 0; m < 12; m++) {
       const colProy = COL_PPTO_OPEX.primerMesProyectado + m * 2;
       const colReal = COL_PPTO_OPEX.primerMesReal + m * 2;
+      proyectadoCrudo.push(fila[colProy]);
+      realCrudo.push(fila[colReal]);
       proyectado.push(aNumero(fila[colProy]));
       real.push(aNumero(fila[colReal]));
     }
+    const presupuestoAprobadoCrudo = fila[COL_PPTO_OPEX.presupuestoAprobado];
+    const presupuestoAprobado = aNumero(presupuestoAprobadoCrudo);
 
     lineas.push({
       filaExcel: i + 1,
@@ -162,7 +169,15 @@ export function extraerPresupuestoOpex(wb: XLSX.WorkBook, nombreHoja: string): P
       tiempo: "",
       real,
       proyectado,
-      presupuestoAprobado: aNumero(fila[COL_PPTO_OPEX.presupuestoAprobado]),
+      presupuestoAprobado,
+      advertencias: detectarAdvertencias({
+        realCrudo,
+        proyectadoCrudo,
+        presupuestoAprobadoCrudo,
+        real,
+        proyectado,
+        presupuestoAprobado,
+      }),
     });
   }
   return lineas;

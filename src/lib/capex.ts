@@ -24,6 +24,10 @@ export interface ProyectoCapex {
   /** Gasto proyectado por mes, en USD (índice 0 = enero … 11 = diciembre). */
   proyectado: number[];
   presupuestoAprobado: number;
+  /** Problemas detectados en los datos crudos de esta línea (celdas con error de fórmula
+   *  en el Excel, o un mes desproporcionado frente al Presupuesto Aprobado) — vacío si no
+   *  hay nada raro. Ver lib/validacionPresupuesto.ts para el criterio exacto. */
+  advertencias: string[];
 }
 
 /** ProyectoCapex ya resuelto para un mes de cierre concreto: real+proyectado combinados
