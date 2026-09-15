@@ -11,6 +11,7 @@ import CampoEditable from "@/components/CampoEditable";
 import CampoMontoSumado from "@/components/CampoMontoSumado";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
 import FiltroMultiple from "@/components/FiltroMultiple";
+import { useAnio } from "@/components/AnioProvider";
 
 const NOMBRES_MES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const RANGO_DIACRITICOS = /[\u0300-\u036f]/g;
@@ -72,6 +73,7 @@ function estiloFijo(clave: (typeof CLAVES_FIJAS)[number], fondo: string): React.
 export default function PresupuestoOpex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
+  const anio = useAnio();
   const [lineas, setLineas] = useState<ProyectoCapex[] | null>(null);
   const [archivo, setArchivo] = useState("");
   const [actualizadoEn, setActualizadoEn] = useState("");
@@ -122,7 +124,7 @@ export default function PresupuestoOpex() {
     const mesNuevo = mesCierreServidor + 1;
     const nombreMesNuevo = NOMBRES_MES_CIERRE[mesNuevo - 1];
     const confirmado = window.confirm(
-      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto 2026 al registrarla — hasta ahora quedaba solo en el historial.`
+      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto ${anio} al registrarla — hasta ahora quedaba solo en el historial.`
     );
     if (!confirmado) return;
 
@@ -307,9 +309,9 @@ export default function PresupuestoOpex() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-semibold">Presupuesto OPEX 2026</h2>
+        <h2 className="text-lg font-semibold">Presupuesto OPEX {anio}</h2>
         <p className="text-sm" style={{ color: "var(--texto-suave)" }}>
-          Todas las líneas de gasto de &quot;{archivo || "Presupuesto 2026"}&quot;, en vivo. {filtradas.length} de{" "}
+          Todas las líneas de gasto de &quot;{archivo || `Presupuesto ${anio}`}&quot;, en vivo. {filtradas.length} de{" "}
           {resueltas.length} líneas.
         </p>
       </div>

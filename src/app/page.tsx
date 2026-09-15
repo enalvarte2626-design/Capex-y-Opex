@@ -38,6 +38,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import { moneda, moneda2, monedaK, soles, solesK } from "@/lib/format";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
+import { useAnio } from "@/components/AnioProvider";
 import MontoSoles from "@/components/MontoSoles";
 
 // Anchos fijos de las tablas "Panorama" — mismo criterio que ya usa Presupuesto OPEX
@@ -104,6 +105,7 @@ interface RespuestaCapex {
 export default function DashboardCapex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
+  const anio = useAnio();
   const [datos, setDatos] = useState<RespuestaCapex | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -479,7 +481,7 @@ export default function DashboardCapex() {
           mantiene su propio scroll horizontal si no entra en la mitad de la pantalla. */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <PanoramaTrimestralSection
-          titulo="Panorama proyectado 2026 (línea base)"
+          titulo={`Panorama proyectado ${anio} (línea base)`}
           panorama={panoramaProyectado}
           mesResaltado={mesCierre}
           mostrarSoles={mostrarSoles}
@@ -487,7 +489,7 @@ export default function DashboardCapex() {
         />
 
         <PanoramaTrimestralSection
-          titulo="Panorama actual 2026"
+          titulo={`Panorama actual ${anio}`}
           panorama={panoramaActual}
           mesCierre={mesCierre}
           mesResaltado={mesCierre}

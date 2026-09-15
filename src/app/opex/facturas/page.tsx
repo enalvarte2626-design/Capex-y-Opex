@@ -8,6 +8,7 @@ import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import { agruparProveedores, claveNormalizada, mapaRucPorProveedor } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
+import { useAnio } from "@/components/AnioProvider";
 import type { FacturaOpex } from "@/lib/opex-parse";
 
 interface LineaOpcion {
@@ -47,6 +48,7 @@ function formularioVacio() {
 export default function FacturasOpex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
+  const anio = useAnio();
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -231,8 +233,8 @@ export default function FacturasOpex() {
     const confirmado = window.confirm(
       `¿Registrar ${esDescuento ? "un descuento/nota de crédito" : "factura"} de ${descripcionMonto} para "${lineaElegida.lineaGasto}", período ${mesTexto}? ` +
         (esMesPasado
-          ? `${mesTexto} ya está cerrado: esto NO va a sumar al Gasto Real de Presupuesto 2026, solo queda en el historial.`
-          : `Esto ${esDescuento ? "resta" : "suma"} ${moneda2(Math.abs(montoUsd))} al Gasto Real de ${mesTexto} en Presupuesto 2026.`)
+          ? `${mesTexto} ya está cerrado: esto NO va a sumar al Gasto Real de Presupuesto ${anio}, solo queda en el historial.`
+          : `Esto ${esDescuento ? "resta" : "suma"} ${moneda2(Math.abs(montoUsd))} al Gasto Real de ${mesTexto} en Presupuesto ${anio}.`)
     );
     if (!confirmado) return;
 
@@ -259,7 +261,7 @@ export default function FacturasOpex() {
         tipo: "ok",
         texto: json.presupuestoActualizado
           ? `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`
-          : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? "No se modificó el Presupuesto 2026."}`,
+          : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? `No se modificó el Presupuesto ${anio}.`}`,
       });
       // Limpia todo el formulario para el siguiente registro — nada debe quedar pegado
       // de esta factura (Empresa/Grupo/Subgrupo/Línea, Proveedor, RUC, etc.).
@@ -386,7 +388,7 @@ export default function FacturasOpex() {
             {Number(form.mes) <= mesCierre && (
               <p className="text-xs mt-1" style={{ color: "var(--alerta)" }}>
                 Mes ya cerrado: la factura queda en el historial pero NO se suma al
-                Presupuesto 2026 de ese mes.
+                Presupuesto {anio} de ese mes.
               </p>
             )}
           </div>

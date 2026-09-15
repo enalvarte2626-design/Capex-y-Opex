@@ -32,6 +32,7 @@ import { moneda, moneda2, soles, solesK } from "@/lib/format";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
 import FiltroMultiple from "@/components/FiltroMultiple";
 import MontoSoles from "@/components/MontoSoles";
+import { useAnio } from "@/components/AnioProvider";
 
 const COLORES = ["#c8102e", "#0f6cbd", "#107c10", "#d83b01", "#5c2d91", "#008272", "#986f0b", "#e3008c"];
 
@@ -80,6 +81,7 @@ interface RespuestaOpex {
 }
 
 export default function DashboardOpex() {
+  const anio = useAnio();
   const [datos, setDatos] = useState<RespuestaOpex | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -277,7 +279,7 @@ export default function DashboardOpex() {
       <LineasSinGastoSection filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
 
       <PanoramaTrimestralSection
-        titulo="Panorama OPEX 2026"
+        titulo={`Panorama OPEX ${anio}`}
         panorama={panorama}
         lineas={filtradas}
         mesCierre={mesCierre}

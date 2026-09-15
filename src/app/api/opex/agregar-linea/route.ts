@@ -129,7 +129,7 @@ export async function POST(request: Request) {
     const lineas = extraerPresupuestoOpex(wb, hojaPresupuesto);
     const linea = lineas.find((l) => l.filaExcel === filaPresupuesto);
     if (!linea) {
-      return NextResponse.json({ error: "No se encontró esa línea de gasto en Presupuesto 2026." }, { status: 404 });
+      return NextResponse.json({ error: `No se encontró esa línea de gasto en ${hojaPresupuesto}.` }, { status: 404 });
     }
 
     // 2) Crea la hoja de facturas (con encabezados) si es la primera vez que se usa.
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
         montoSoles,
         tipoCambio,
         presupuestoActualizado: false,
-        aviso: "Mes pasado: la factura quedó registrada en el historial, pero no se sumó al Gasto Real de Presupuesto 2026.",
+        aviso: `Mes pasado: la factura quedó registrada en el historial, pero no se sumó al Gasto Real de ${hojaPresupuesto}.`,
       });
     }
 

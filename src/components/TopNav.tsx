@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import IconoCapex from "./iconos/IconoCapex";
 import IconoOpex from "./iconos/IconoOpex";
+import { useAnio } from "./AnioProvider";
 
 interface Enlace {
   href: string;
@@ -19,31 +20,34 @@ interface Categoria {
 
 /** Las dos categorías principales del dashboard — misma estructura de páginas que ya
  *  existía en Sidebar, solo horizontal (arriba) en vez de vertical (a la izquierda), para
- *  liberar ancho para el contenido. Ningún href cambia. */
-const CATEGORIAS: Categoria[] = [
-  {
-    clave: "capex",
-    etiqueta: "CAPEX",
-    icono: IconoCapex,
-    enlaces: [
-      { href: "/", etiqueta: "Dashboard" },
-      { href: "/bd-capex", etiqueta: "Detalle BD_CAPEX" },
-      { href: "/planificacion", etiqueta: "Planificación 2026" },
-      { href: "/facturas", etiqueta: "Facturas" },
-    ],
-  },
-  {
-    clave: "opex",
-    etiqueta: "OPEX",
-    icono: IconoOpex,
-    enlaces: [
-      { href: "/opex", etiqueta: "Dashboard" },
-      { href: "/opex/presupuesto", etiqueta: "Presupuesto" },
-      { href: "/opex/planificacion", etiqueta: "Planificación 2026" },
-      { href: "/opex/facturas", etiqueta: "Facturas" },
-    ],
-  },
-];
+ *  liberar ancho para el contenido. Ningún href cambia. Es una función (no una constante
+ *  fija) porque la etiqueta "Planificación {anio}" depende del año de presupuesto actual. */
+function categorias(anio: string): Categoria[] {
+  return [
+    {
+      clave: "capex",
+      etiqueta: "CAPEX",
+      icono: IconoCapex,
+      enlaces: [
+        { href: "/", etiqueta: "Dashboard" },
+        { href: "/bd-capex", etiqueta: "Detalle BD_CAPEX" },
+        { href: "/planificacion", etiqueta: `Planificación ${anio}` },
+        { href: "/facturas", etiqueta: "Facturas" },
+      ],
+    },
+    {
+      clave: "opex",
+      etiqueta: "OPEX",
+      icono: IconoOpex,
+      enlaces: [
+        { href: "/opex", etiqueta: "Dashboard" },
+        { href: "/opex/presupuesto", etiqueta: "Presupuesto" },
+        { href: "/opex/planificacion", etiqueta: `Planificación ${anio}` },
+        { href: "/opex/facturas", etiqueta: "Facturas" },
+      ],
+    },
+  ];
+}
 
 interface Props {
   /** Sin contraseña configurada (dev local) — no muestra el botón de salir. */
@@ -53,6 +57,8 @@ interface Props {
 export default function TopNav({ local }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const anio = useAnio();
+  const CATEGORIAS = categorias(anio);
   const categoriaActiva = pathname.startsWith("/opex") ? "opex" : "capex";
   const catActivaObj = CATEGORIAS.find((c) => c.clave === categoriaActiva)!;
 

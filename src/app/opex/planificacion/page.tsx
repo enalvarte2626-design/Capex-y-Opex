@@ -10,6 +10,7 @@ import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import CampoEditable from "@/components/CampoEditable";
 import CampoMontoSumado from "@/components/CampoMontoSumado";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
+import { useAnio } from "@/components/AnioProvider";
 
 const NOMBRES_MES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const RANGO_DIACRITICOS = /[̀-ͯ]/g;
@@ -34,6 +35,7 @@ const ESTILO_DESTACADO = { background: "var(--acento-suave)" };
 export default function PlanificacionOpex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
+  const anio = useAnio();
 
   const [lineas, setLineas] = useState<ProyectoCapex[] | null>(null);
   const [archivo, setArchivo] = useState("");
@@ -138,7 +140,7 @@ export default function PlanificacionOpex() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-semibold">Planificación OPEX 2026</h2>
+        <h2 className="text-lg font-semibold">Planificación OPEX {anio}</h2>
         <p className="text-sm" style={{ color: "var(--texto-suave)" }}>
           Reparte el Presupuesto Aprobado de cada línea entre los 12 meses del año ({archivo || "…"}). La columna
           Diferencia muestra lo que todavía falta (o sobra) por programar — en $0 la línea ya quedó totalmente
