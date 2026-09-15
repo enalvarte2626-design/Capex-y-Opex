@@ -28,6 +28,7 @@ const CATEGORIAS: Categoria[] = [
     enlaces: [
       { href: "/", etiqueta: "Dashboard" },
       { href: "/bd-capex", etiqueta: "Detalle BD_CAPEX" },
+      { href: "/planificacion", etiqueta: "Planificación 2026" },
       { href: "/facturas", etiqueta: "Facturas" },
     ],
   },
@@ -38,6 +39,7 @@ const CATEGORIAS: Categoria[] = [
     enlaces: [
       { href: "/opex", etiqueta: "Dashboard" },
       { href: "/opex/presupuesto", etiqueta: "Presupuesto" },
+      { href: "/opex/planificacion", etiqueta: "Planificación 2026" },
       { href: "/opex/facturas", etiqueta: "Facturas" },
     ],
   },
