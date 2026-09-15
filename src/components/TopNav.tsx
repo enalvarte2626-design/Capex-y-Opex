@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import IconoCapex from "./iconos/IconoCapex";
 import IconoOpex from "./iconos/IconoOpex";
-import { useAnio } from "./AnioProvider";
+import { useAnios } from "./AnioProvider";
 
 interface Enlace {
   href: string;
@@ -21,8 +21,9 @@ interface Categoria {
 /** Las dos categorías principales del dashboard — misma estructura de páginas que ya
  *  existía en Sidebar, solo horizontal (arriba) en vez de vertical (a la izquierda), para
  *  liberar ancho para el contenido. Ningún href cambia. Es una función (no una constante
- *  fija) porque la etiqueta "Planificación {anio}" depende del año de presupuesto actual. */
-function categorias(anio: string): Categoria[] {
+ *  fija) porque la etiqueta "Planificación {año}" depende del año activo de cada módulo
+ *  — y Planificación siempre apunta al año SIGUIENTE (el que todavía no se aprueba). */
+function categorias(anioCapex: string, anioOpex: string): Categoria[] {
   return [
     {
       clave: "capex",
@@ -31,7 +32,7 @@ function categorias(anio: string): Categoria[] {
       enlaces: [
         { href: "/", etiqueta: "Dashboard" },
         { href: "/bd-capex", etiqueta: "Detalle BD_CAPEX" },
-        { href: "/planificacion", etiqueta: `Planificación ${anio}` },
+        { href: "/planificacion", etiqueta: `Planificación ${Number(anioCapex) + 1}` },
         { href: "/facturas", etiqueta: "Facturas" },
       ],
     },
@@ -42,7 +43,7 @@ function categorias(anio: string): Categoria[] {
       enlaces: [
         { href: "/opex", etiqueta: "Dashboard" },
         { href: "/opex/presupuesto", etiqueta: "Presupuesto" },
-        { href: "/opex/planificacion", etiqueta: `Planificación ${anio}` },
+        { href: "/opex/planificacion", etiqueta: `Planificación ${Number(anioOpex) + 1}` },
         { href: "/opex/facturas", etiqueta: "Facturas" },
       ],
     },
@@ -57,8 +58,8 @@ interface Props {
 export default function TopNav({ local }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const anio = useAnio();
-  const CATEGORIAS = categorias(anio);
+  const anios = useAnios();
+  const CATEGORIAS = categorias(anios.capex, anios.opex);
   const categoriaActiva = pathname.startsWith("/opex") ? "opex" : "capex";
   const catActivaObj = CATEGORIAS.find((c) => c.clave === categoriaActiva)!;
 

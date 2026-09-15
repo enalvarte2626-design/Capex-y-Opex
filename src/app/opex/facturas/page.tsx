@@ -8,7 +8,7 @@ import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import { agruparProveedores, claveNormalizada, mapaRucPorProveedor } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
-import { useAnio } from "@/components/AnioProvider";
+import { useAnios } from "@/components/AnioProvider";
 import type { FacturaOpex } from "@/lib/opex-parse";
 
 interface LineaOpcion {
@@ -48,7 +48,7 @@ function formularioVacio() {
 export default function FacturasOpex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
-  const anio = useAnio();
+  const anio = useAnios().opex;
   const [datos, setDatos] = useState<Respuesta | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);

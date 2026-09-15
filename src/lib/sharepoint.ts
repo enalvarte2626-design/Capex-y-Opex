@@ -295,6 +295,47 @@ export async function insertarFila(
   });
 }
 
+/**
+ * Renombra una hoja existente — no toca ninguna fórmula ni valor, Excel solo actualiza
+ * las referencias que la nombran a propósito ('Hoja'!Celda) en otras hojas, y ninguna de
+ * las fórmulas de esta app usa esa sintaxis (todas viven dentro de su propia hoja). Se
+ * usa para el cambio de año: la hoja de planificación pasa a ser la hoja en vivo con un
+ * simple renombre — nunca copiando ni borrando filas — y la hoja en vivo saliente queda
+ * archivada con el año en el nombre.
+ */
+export async function renombrarHoja(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  nombreActual: string,
+  nombreNuevo: string
+): Promise<void> {
+  await graphFetch(
+    config,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(nombreActual)}')`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: nombreNuevo }),
+    }
+  );
+}
+
+/** Borra una hoja si existe (no falla si ya no está) — para limpiar un borrador viejo
+ *  antes de regenerarlo desde cero. */
+export async function eliminarHojaSiExiste(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  nombreHoja: string
+): Promise<void> {
+  const existentes = await listarHojas(config, archivo);
+  if (!existentes.some((n) => n.toLowerCase() === nombreHoja.toLowerCase())) return;
+  await graphFetch(
+    config,
+    `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/worksheets('${encodeURIComponent(nombreHoja)}')`,
+    { method: "DELETE" }
+  );
+}
+
 /** Nombres de todas las hojas que ya tiene el archivo. */
 export async function listarHojas(
   config: ConfiguracionSharePoint,

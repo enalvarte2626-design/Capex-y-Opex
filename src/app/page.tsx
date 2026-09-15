@@ -38,7 +38,7 @@ import { usePersistedState } from "@/lib/usePersistedState";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
 import { moneda, moneda2, monedaK, soles, solesK } from "@/lib/format";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
-import { useAnio } from "@/components/AnioProvider";
+import { useAnios } from "@/components/AnioProvider";
 import MontoSoles from "@/components/MontoSoles";
 
 // Anchos fijos de las tablas "Panorama" — mismo criterio que ya usa Presupuesto OPEX
@@ -105,7 +105,7 @@ interface RespuestaCapex {
 export default function DashboardCapex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
-  const anio = useAnio();
+  const anio = useAnios().capex;
   const [datos, setDatos] = useState<RespuestaCapex | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import TopNav from "./TopNav";
-import { useAnio } from "./AnioProvider";
+import { useAnios } from "./AnioProvider";
 
 interface Props {
   local: boolean;
@@ -15,7 +15,7 @@ interface Props {
  *  `children` que recibían antes. */
 export default function AppShell({ local, children }: Props) {
   const pathname = usePathname();
-  const anio = useAnio();
+  const anios = useAnios();
   const esOpex = pathname.startsWith("/opex");
   const esLogin = pathname === "/login";
 
@@ -30,7 +30,7 @@ export default function AppShell({ local, children }: Props) {
       <header className="border-b" style={{ borderColor: "var(--borde)", background: "var(--card)" }}>
         <div className="max-w-[1800px] px-6 py-4">
           <h1 className="text-xl font-semibold">
-            {esOpex ? `PRESUPUESTO OPEX TI - ${anio}` : `PRESUPUESTO CAPEX TI - ${anio}`}
+            {esOpex ? `PRESUPUESTO OPEX TI - ${anios.opex}` : `PRESUPUESTO CAPEX TI - ${anios.capex}`}
           </h1>
         </div>
       </header>

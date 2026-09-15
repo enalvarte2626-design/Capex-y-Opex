@@ -11,7 +11,7 @@ import CampoEditable from "@/components/CampoEditable";
 import CampoMontoSumado from "@/components/CampoMontoSumado";
 import ControlTipoCambio from "@/components/ControlTipoCambio";
 import FiltroMultiple from "@/components/FiltroMultiple";
-import { useAnio } from "@/components/AnioProvider";
+import { useAnios } from "@/components/AnioProvider";
 
 const NOMBRES_MES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const RANGO_DIACRITICOS = /[\u0300-\u036f]/g;
@@ -73,7 +73,7 @@ function estiloFijo(clave: (typeof CLAVES_FIJAS)[number], fondo: string): React.
 export default function PresupuestoOpex() {
   const nivelAcceso = useNivelAcceso();
   const puedeEditar = nivelAcceso === "completo";
-  const anio = useAnio();
+  const anio = useAnios().opex;
   const [lineas, setLineas] = useState<ProyectoCapex[] | null>(null);
   const [archivo, setArchivo] = useState("");
   const [actualizadoEn, setActualizadoEn] = useState("");

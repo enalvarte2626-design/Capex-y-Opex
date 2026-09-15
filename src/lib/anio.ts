@@ -1,22 +1,40 @@
+import {
+  camposFaltantes,
+  camposFaltantesOpex,
+  obtenerConfiguracionOpex,
+  obtenerConfiguracionSharePoint,
+  resolverArchivoPorShareUrl,
+} from "./sharepoint";
+import { leerAnioActivo } from "./anioActivoConfig";
+
+/** Punto de partida si todavía nunca se aprobó ningún año desde el botón "Aprobar y
+ *  activar" (o si el Excel no está configurado, ej. en desarrollo local). */
+const ANIO_POR_DEFECTO = Number(process.env.ANIO_PRESUPUESTO?.trim()) || 2026;
+
 /**
- * Año de presupuesto que la app está mostrando — un solo lugar para cambiarlo cada año
- * nuevo (2027, 2028…) SIN TOCAR CÓDIGO: basta con actualizar la variable de entorno
- * ANIO_PRESUPUESTO en Azure (App Settings del App Service) y reiniciar la app — Azure ya
- * reinicia solo al guardar un cambio de configuración, no hace falta un despliegue nuevo.
- * Sin esa variable, usa "2026" (el año con el que se armó la app) como valor por defecto.
- *
- * Sin "use client" a propósito: así tanto el layout (servidor, para el título de la
- * pestaña) como cualquier ruta de API pueden importarlo directo. Los componentes de
- * cliente (menús, títulos de pantalla) lo reciben en cambio vía `useAnio()` en
- * `AnioProvider.tsx` — nunca leen `process.env` ellos mismos, porque en un componente de
- * cliente esa lectura quedaría fija en lo que hubiera al compilar, no en lo que diga la
- * variable de entorno en producción.
- *
- * OJO: esto solo cambia el AÑO que se muestra en pantalla (títulos, menú). Si el Excel
- * real usa una hoja distinta cada año (ej. "Presupuesto 2026" → "Presupuesto 2027"), hay
- * que actualizar también las variables SP_OPEX_HOJA_PRESUPUESTO / SP_CAPEX_HOJA_PROYECCION
- * — ambas ya son variables de entorno, así que tampoco necesitan tocar código.
+ * Año de presupuesto activo de CAPEX/OPEX — CADA UNO VIVE EN SU PROPIO EXCEL (archivos
+ * distintos), así que se lee por separado. Nunca lanza: si el Excel no responde o no
+ * está configurado, cae en ANIO_POR_DEFECTO — esto se usa en el layout de TODA la app,
+ * así que una falla de red acá no puede tumbar ninguna página.
  */
-export function anioPresupuestoActual(): string {
-  return process.env.ANIO_PRESUPUESTO?.trim() || "2026";
+export async function anioActivoCapex(): Promise<number> {
+  try {
+    const config = obtenerConfiguracionSharePoint();
+    if (camposFaltantes(config).length > 0) return ANIO_POR_DEFECTO;
+    const archivo = await resolverArchivoPorShareUrl(config);
+    return await leerAnioActivo(config, archivo, ANIO_POR_DEFECTO);
+  } catch {
+    return ANIO_POR_DEFECTO;
+  }
+}
+
+export async function anioActivoOpex(): Promise<number> {
+  try {
+    const config = obtenerConfiguracionOpex();
+    if (camposFaltantesOpex(config).length > 0) return ANIO_POR_DEFECTO;
+    const archivo = await resolverArchivoPorShareUrl(config);
+    return await leerAnioActivo(config, archivo, ANIO_POR_DEFECTO);
+  } catch {
+    return ANIO_POR_DEFECTO;
+  }
 }
