@@ -179,6 +179,28 @@ export async function listarNombresCarpeta(
   return items.map((i) => i.name);
 }
 
+/** Resuelve un archivo por NOMBRE dentro de una carpeta ya conocida (sin necesitar su
+ *  propio enlace "compartir") — para poder abrir, por ejemplo, el archivo de un cierre
+ *  anterior que quedó guardado al lado del archivo en vivo. */
+export async function resolverArchivoPorNombreEnCarpeta(
+  config: ConfiguracionSharePoint,
+  driveId: string,
+  carpetaId: string,
+  nombre: string
+): Promise<ArchivoResuelto> {
+  const res = await graphFetch(
+    config,
+    `/drives/${driveId}/items/${carpetaId}:/${encodeURIComponent(nombre)}?$select=id,name,parentReference`
+  );
+  const datos = await res.json();
+  return {
+    driveId,
+    itemId: datos.id as string,
+    nombre: datos.name as string,
+    carpetaId,
+  };
+}
+
 /** Sube un archivo nuevo (≤4 MB) a una carpeta puntual. Falla si ya existe uno con ese nombre. */
 export async function crearArchivo(
   config: ConfiguracionSharePoint,
