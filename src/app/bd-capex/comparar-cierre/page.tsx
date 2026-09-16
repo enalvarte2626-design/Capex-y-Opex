@@ -77,6 +77,7 @@ export default function CompararCierre() {
   const [comparando, setComparando] = useState(false);
   const [resultado, setResultado] = useState<ResultadoComparacion | null>(null);
   const [soloMesesCerrados, setSoloMesesCerrados] = useState(false);
+  const [grupoSel, setGrupoSel] = useState("");
 
   useEffect(() => {
     fetch("/api/capex/cierres-disponibles", { cache: "no-store" })
@@ -144,11 +145,19 @@ export default function CompararCierre() {
     }
   }
 
-  const cambiosMostrados = resultado
-    ? soloMesesCerrados
-      ? resultado.cambios.filter((c) => c.eraMesCerrado)
-      : resultado.cambios
-    : [];
+  const gruposDisponibles = useMemo(
+    () => Array.from(new Set((resultado?.cambios ?? []).map((c) => c.grupoNegocio || "SIN GRUPO"))).sort((a, b) => a.localeCompare(b, "es")),
+    [resultado]
+  );
+
+  const cambiosMostrados = useMemo(() => {
+    if (!resultado) return [];
+    let filas = resultado.cambios;
+    if (soloMesesCerrados) filas = filas.filter((c) => c.eraMesCerrado);
+    if (grupoSel) filas = filas.filter((c) => (c.grupoNegocio || "SIN GRUPO") === grupoSel);
+    return filas;
+  }, [resultado, soloMesesCerrados, grupoSel]);
+
   const totalMesesCerrados = resultado?.cambios.filter((c) => c.eraMesCerrado).length ?? 0;
 
   return (
@@ -349,6 +358,14 @@ export default function CompararCierre() {
                 >
                   {soloMesesCerrados ? "✓ " : ""}Solo meses ya cerrados{totalMesesCerrados > 0 ? ` (${totalMesesCerrados})` : ""}
                 </span>
+                <select className="campo" style={{ width: "auto" }} value={grupoSel} onChange={(e) => setGrupoSel(e.target.value)}>
+                  <option value="">Todos los grupos</option>
+                  {gruposDisponibles.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
                 <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
                   {cambiosMostrados.length} de {resultado.cambios.length} cambios
                 </span>
@@ -358,6 +375,7 @@ export default function CompararCierre() {
                   <thead style={{ position: "sticky", top: 0, background: "var(--bg)" }}>
                     <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
                       <th className="py-2 px-3 font-semibold">Proyecto</th>
+                      <th className="py-2 px-3 font-semibold">Grupo</th>
                       <th className="py-2 px-3 font-semibold">Campo</th>
                       <th className="py-2 px-3 font-semibold text-center">Antes</th>
                       <th className="py-2 px-3 font-semibold text-center">Ahora</th>
@@ -381,6 +399,7 @@ export default function CompararCierre() {
                             </span>
                           )}
                         </td>
+                        <td className="py-1.5 px-3">{c.grupoNegocio}</td>
                         <td className="py-1.5 px-3">
                           {c.campo}
                           {c.eraMesCerrado && (
