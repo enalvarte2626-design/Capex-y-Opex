@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
  * Compara BD_CAPEX en vivo contra un punto de referencia: ?itemId=... (archivo, obligatorio),
  * &nombre=... (para mostrar), &versionId=... (opcional — si no viene, usa el contenido
  * MÁS RECIENTE de ese archivo), &fechaVersion=... (opcional, solo para mostrar) y
- * &cerrados=N (cuántos meses estaban cerrados en ese punto de referencia).
+ * &cerrados=N (cuántos meses estaban cerrados en ese punto de referencia) y
+ * &cerradosActual=N (cuántos meses están cerrados HOY, para el resumen por grupo).
  */
 export async function GET(req: NextRequest) {
   const config = obtenerConfiguracionSharePoint();
@@ -22,12 +23,16 @@ export async function GET(req: NextRequest) {
   const versionId = req.nextUrl.searchParams.get("versionId")?.trim() || undefined;
   const fechaVersion = req.nextUrl.searchParams.get("fechaVersion")?.trim() || undefined;
   const cerrados = Number(req.nextUrl.searchParams.get("cerrados") ?? "0");
+  const cerradosActual = Number(req.nextUrl.searchParams.get("cerradosActual") ?? "0");
 
   if (!itemId || !nombre) {
     return NextResponse.json({ error: "Falta indicar contra qué archivo comparar." }, { status: 400 });
   }
   if (!Number.isInteger(cerrados) || cerrados < 0 || cerrados > 12) {
     return NextResponse.json({ error: "Meses cerrados en la referencia inválido (debe ser 0-12)." }, { status: 400 });
+  }
+  if (!Number.isInteger(cerradosActual) || cerradosActual < 0 || cerradosActual > 12) {
+    return NextResponse.json({ error: "Meses cerrados ahora inválido (debe ser 0-12)." }, { status: 400 });
   }
 
   try {
@@ -38,7 +43,8 @@ export async function GET(req: NextRequest) {
       archivo,
       hoja,
       { driveId: archivo.driveId, itemId, nombre, versionId, fechaVersion },
-      cerrados
+      cerrados,
+      cerradosActual
     );
     return NextResponse.json(resultado);
   } catch (e) {

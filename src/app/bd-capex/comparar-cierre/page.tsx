@@ -30,12 +30,24 @@ interface CambioLinea {
   eraMesCerrado: boolean;
 }
 
+interface ResumenGrupo {
+  grupoNegocio: string;
+  diferenciaAntes: number;
+  diferenciaAhora: number;
+  cambio: number;
+}
+
 interface ResultadoComparacion {
   nombreArchivoAnterior: string;
   fechaVersionAnterior: string | null;
   cerradosEnReferencia: number;
+  cerradosActual: number;
   proyectosNuevos: string[];
   cambios: CambioLinea[];
+  resumenPorGrupo: ResumenGrupo[];
+  totalAntes: number;
+  totalAhora: number;
+  totalCambio: number;
 }
 
 const VERSION_ACTUAL = "__actual__";
@@ -60,6 +72,7 @@ export default function CompararCierre() {
   const [cargandoVersiones, setCargandoVersiones] = useState(false);
   const [versionSel, setVersionSel] = useState(VERSION_ACTUAL);
   const [cerrados, setCerrados] = useState(0);
+  const [cerradosActual, setCerradosActual] = useState(0);
 
   const [comparando, setComparando] = useState(false);
   const [resultado, setResultado] = useState<ResultadoComparacion | null>(null);
@@ -79,6 +92,8 @@ export default function CompararCierre() {
           setItemIdSel(sugerido.itemId);
           setCerrados(sugerido.cerradosSugeridos);
         }
+        const actual = (j.disponibles as ArchivoParaComparar[]).find((a) => a.esArchivoActual);
+        if (actual) setCerradosActual(actual.cerradosSugeridos);
       })
       .catch((e) => setError((e as Error).message))
       .finally(() => setCargandoLista(false));
@@ -112,6 +127,7 @@ export default function CompararCierre() {
         itemId: archivoSel.itemId,
         nombre: archivoSel.nombre,
         cerrados: String(cerrados),
+        cerradosActual: String(cerradosActual),
       });
       if (version) {
         params.set("versionId", version.id);
@@ -207,6 +223,26 @@ export default function CompararCierre() {
             <span className="text-xs" style={{ color: "var(--texto-suave)" }} title="No siempre coincide con lo que dice el nombre del archivo — ajústalo si ese archivo siguió editándose después de generarse.">
               (ajústalo si el archivo se siguió editando después de &quot;cerrarse&quot;)
             </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="etiqueta mb-0">Meses cerrados ahora:</span>
+            <select
+              className="campo"
+              style={{ width: "auto" }}
+              value={cerradosActual}
+              onChange={(e) => setCerradosActual(Number(e.target.value))}
+            >
+              <option value={0}>Ninguno</option>
+              {NOMBRES_MES_CIERRE.map((nombre, i) => (
+                <option key={nombre} value={i + 1}>
+                  Hasta {nombre}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
+              — para calcular el resumen por Grupo de Negocio (abajo)
+            </span>
             <button className="boton-primario ml-auto" onClick={comparar} disabled={comparando || !archivoSel}>
               {comparando ? "Comparando…" : "Comparar"}
             </button>
@@ -220,8 +256,73 @@ export default function CompararCierre() {
             Comparado contra: <strong>{resultado.nombreArchivoAnterior}</strong>
             {resultado.fechaVersionAnterior && ` — versión del ${new Date(resultado.fechaVersionAnterior).toLocaleString("es-PE")}`}
             {" · "}
-            {resultado.cerradosEnReferencia} mes(es) cerrado(s) en ese punto.
+            {resultado.cerradosEnReferencia} mes(es) cerrado(s) en ese punto, {resultado.cerradosActual} mes(es) cerrado(s) ahora.
           </p>
+
+          <div className="card p-4">
+            <h3 className="font-semibold mb-3">Diferencia presupuestal: antes vs. ahora</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-lg p-3" style={{ background: "var(--bg)" }}>
+                <p className="text-xs" style={{ color: "var(--texto-suave)" }}>
+                  Diferencia en {resultado.nombreArchivoAnterior}
+                </p>
+                <p className="text-2xl font-bold" style={{ color: resultado.totalAntes < 0 ? "var(--peligro)" : "var(--exito)" }}>
+                  {moneda2(resultado.totalAntes)}
+                </p>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: "var(--bg)" }}>
+                <p className="text-xs" style={{ color: "var(--texto-suave)" }}>
+                  Diferencia ahora
+                </p>
+                <p className="text-2xl font-bold" style={{ color: resultado.totalAhora < 0 ? "var(--peligro)" : "var(--exito)" }}>
+                  {moneda2(resultado.totalAhora)}
+                </p>
+              </div>
+              <div className="rounded-lg p-3" style={{ background: resultado.totalCambio >= 0 ? "#e3f3e3" : "#fbe1ec" }}>
+                <p className="text-xs" style={{ color: "var(--texto-suave)" }}>
+                  Cambio ({resultado.totalCambio >= 0 ? "mejoró / ahorro" : "empeoró / sobrepaso"})
+                </p>
+                <p className="text-2xl font-bold" style={{ color: resultado.totalCambio >= 0 ? "var(--exito)" : "var(--peligro)" }}>
+                  {resultado.totalCambio > 0 ? "+" : ""}
+                  {moneda2(resultado.totalCambio)}
+                </p>
+              </div>
+            </div>
+
+            <h4 className="font-semibold text-sm mb-2">Por Grupo de Negocio, ordenado por el cambio más grande</h4>
+            <div className="overflow-x-auto">
+              <table className="text-xs border-collapse w-full">
+                <thead>
+                  <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
+                    <th className="py-1.5 px-3 font-semibold">Grupo</th>
+                    <th className="py-1.5 px-3 font-semibold text-center">Antes</th>
+                    <th className="py-1.5 px-3 font-semibold text-center">Ahora</th>
+                    <th className="py-1.5 px-3 font-semibold text-center">Cambio</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {resultado.resumenPorGrupo.map((g) => (
+                    <tr key={g.grupoNegocio} style={{ borderTop: "1px solid var(--borde)" }}>
+                      <td className="py-1.5 px-3 font-semibold">{g.grupoNegocio}</td>
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap" style={{ color: g.diferenciaAntes < 0 ? "var(--peligro)" : undefined }}>
+                        {moneda2(g.diferenciaAntes)}
+                      </td>
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap" style={{ color: g.diferenciaAhora < 0 ? "var(--peligro)" : undefined }}>
+                        {moneda2(g.diferenciaAhora)}
+                      </td>
+                      <td
+                        className="py-1.5 px-3 text-center whitespace-nowrap font-bold"
+                        style={{ color: g.cambio >= 0 ? "var(--exito)" : "var(--peligro)" }}
+                      >
+                        {g.cambio > 0 ? "+" : ""}
+                        {moneda2(g.cambio)} {g.cambio >= 0 ? "▲ ahorro" : "▼ gasto aumentado"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {resultado.proyectosNuevos.length > 0 && (
             <div className="card p-4 text-sm">

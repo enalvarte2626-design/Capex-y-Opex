@@ -79,12 +79,53 @@ export interface CambioLinea {
   eraMesCerrado: boolean;
 }
 
+export interface ResumenGrupo {
+  grupoNegocio: string;
+  /** Diferencia total del grupo en el punto de referencia (Presupuesto Aprobado menos
+   *  lo ejecutado/proyectado en ese momento) — negativo = ya se había sobrepasado el
+   *  presupuesto; positivo = quedaba margen (ahorro). */
+  diferenciaAntes: number;
+  diferenciaAhora: number;
+  /** diferenciaAhora − diferenciaAntes: positivo = el grupo MEJORÓ (más ahorro o menos
+   *  sobrepaso que antes); negativo = el grupo EMPEORÓ desde el punto de referencia. */
+  cambio: number;
+}
+
 export interface ResultadoComparacion {
   nombreArchivoAnterior: string;
   fechaVersionAnterior: string | null;
   cerradosEnReferencia: number;
+  cerradosActual: number;
   proyectosNuevos: string[];
   cambios: CambioLinea[];
+  /** Por Grupo de Negocio, ordenado del cambio más grande (en valor absoluto) al más
+   *  chico — para ver de un vistazo qué grupo es el que más movió el indicador general. */
+  resumenPorGrupo: ResumenGrupo[];
+  totalAntes: number;
+  totalAhora: number;
+  totalCambio: number;
+}
+
+/** Presupuesto Aprobado − Gasto Real − Forecast, igual fórmula que ya usa el Dashboard
+ *  (resolverProyecto en lib/capex.ts) — acá recalculada aparte porque compararCierre.ts
+ *  trabaja con `ProyectoCapex` crudo (sin resolver), y cada snapshot puede tener su
+ *  propio "meses cerrados" distinto. */
+function diferenciaProyecto(p: { presupuestoAprobado: number; real: number[]; proyectado: number[] }, cerrados: number): number {
+  const gastoReal = p.real.reduce((a, b) => a + b, 0);
+  const forecast = p.proyectado.slice(cerrados).reduce((a, b) => a + b, 0);
+  return p.presupuestoAprobado - gastoReal - forecast;
+}
+
+function sumarDiferenciaPorGrupo(
+  proyectos: Array<{ grupoNegocio: string; presupuestoAprobado: number; real: number[]; proyectado: number[] }>,
+  cerrados: number
+): Map<string, number> {
+  const mapa = new Map<string, number>();
+  for (const p of proyectos) {
+    const clave = p.grupoNegocio || "SIN GRUPO";
+    mapa.set(clave, (mapa.get(clave) ?? 0) + diferenciaProyecto(p, cerrados));
+  }
+  return mapa;
 }
 
 /**
@@ -103,7 +144,8 @@ export async function compararConReferencia(
   archivoActual: ArchivoResuelto,
   hoja: string,
   referencia: { driveId: string; itemId: string; nombre: string; versionId?: string; fechaVersion?: string },
-  cerradosEnReferencia: number
+  cerradosEnReferencia: number,
+  cerradosActual: number
 ): Promise<ResultadoComparacion> {
   const [contenidoActual, contenidoAnterior] = await Promise.all([
     descargarContenido(config, archivoActual),
@@ -169,11 +211,30 @@ export async function compararConReferencia(
   // Los cambios en meses ya cerrados (la causa más probable de lo que se busca) primero.
   cambios.sort((a, b) => (a.eraMesCerrado === b.eraMesCerrado ? 0 : a.eraMesCerrado ? -1 : 1));
 
+  const antesPorGrupo = sumarDiferenciaPorGrupo(proyectosAnteriores, cerradosEnReferencia);
+  const ahoraPorGrupo = sumarDiferenciaPorGrupo(proyectosActuales, cerradosActual);
+  const gruposTodos = new Set([...antesPorGrupo.keys(), ...ahoraPorGrupo.keys()]);
+  const resumenPorGrupo: ResumenGrupo[] = Array.from(gruposTodos)
+    .map((grupoNegocio) => {
+      const diferenciaAntes = antesPorGrupo.get(grupoNegocio) ?? 0;
+      const diferenciaAhora = ahoraPorGrupo.get(grupoNegocio) ?? 0;
+      return { grupoNegocio, diferenciaAntes, diferenciaAhora, cambio: diferenciaAhora - diferenciaAntes };
+    })
+    .sort((a, b) => Math.abs(b.cambio) - Math.abs(a.cambio));
+
+  const totalAntes = resumenPorGrupo.reduce((a, g) => a + g.diferenciaAntes, 0);
+  const totalAhora = resumenPorGrupo.reduce((a, g) => a + g.diferenciaAhora, 0);
+
   return {
     nombreArchivoAnterior: referencia.nombre,
     fechaVersionAnterior: referencia.fechaVersion ?? null,
     cerradosEnReferencia,
+    cerradosActual,
     proyectosNuevos,
     cambios,
+    resumenPorGrupo,
+    totalAntes,
+    totalAhora,
+    totalCambio: totalAhora - totalAntes,
   };
 }
