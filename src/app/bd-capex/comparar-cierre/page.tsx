@@ -1,13 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
 
 const ROSA_TEMPLATE = "#d6246e";
 
-interface ArchivoCierreDisponible {
+interface ArchivoParaComparar {
   nombre: string;
-  cerrados: number;
+  itemId: string;
+  esArchivoActual: boolean;
+  cerradosSugeridos: number;
+}
+
+interface VersionArchivo {
+  id: string;
+  fecha: string;
 }
 
 interface CambioLinea {
@@ -23,27 +31,38 @@ interface CambioLinea {
 }
 
 interface ResultadoComparacion {
-  archivoAnterior: string;
-  cerradosEnArchivoAnterior: number;
+  nombreArchivoAnterior: string;
+  fechaVersionAnterior: string | null;
+  cerradosEnReferencia: number;
   proyectosNuevos: string[];
   cambios: CambioLinea[];
 }
 
+const VERSION_ACTUAL = "__actual__";
+
 /**
- * Compara BD_CAPEX en vivo contra un archivo de cierre anterior (los que va dejando
- * "Generar archivo de cierre" al lado, sin tocarlos) — para responder "¿qué se movió
- * desde el cierre pasado que hace que un indicador salga distinto ahora?". Los cambios
- * en un mes que YA estaba cerrado en ese archivo anterior se muestran primero y
- * resaltados: son la causa más probable de un indicador cerrado que "se mueve solo".
+ * Compara BD_CAPEX en vivo contra un punto de referencia elegido a mano: otro archivo de
+ * la misma carpeta, o una VERSIÓN ANTERIOR de SharePoint de cualquiera de ellos (incluido
+ * el mismo archivo en vivo). Esto último es clave cuando el archivo que se "cerró" y
+ * presentó siguió editándose después (ej. se le agregaron montos de un mes nuevo antes de
+ * generar el archivo siguiente): la comparación no debe hacerse contra el contenido MÁS
+ * RECIENTE de ese archivo (ya trae esos cambios), sino contra la versión de SharePoint
+ * guardada en el momento real de cierre/presentación.
  */
 export default function CompararCierre() {
-  const [archivos, setArchivos] = useState<ArchivoCierreDisponible[] | null>(null);
-  const [archivoActual, setArchivoActual] = useState("");
-  const [seleccionado, setSeleccionado] = useState("");
-  const [resultado, setResultado] = useState<ResultadoComparacion | null>(null);
+  const [archivos, setArchivos] = useState<ArchivoParaComparar[] | null>(null);
+  const [archivoActualNombre, setArchivoActualNombre] = useState("");
   const [cargandoLista, setCargandoLista] = useState(true);
-  const [comparando, setComparando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [itemIdSel, setItemIdSel] = useState("");
+  const [versiones, setVersiones] = useState<VersionArchivo[] | null>(null);
+  const [cargandoVersiones, setCargandoVersiones] = useState(false);
+  const [versionSel, setVersionSel] = useState(VERSION_ACTUAL);
+  const [cerrados, setCerrados] = useState(0);
+
+  const [comparando, setComparando] = useState(false);
+  const [resultado, setResultado] = useState<ResultadoComparacion | null>(null);
   const [soloMesesCerrados, setSoloMesesCerrados] = useState(false);
 
   useEffect(() => {
@@ -52,20 +71,53 @@ export default function CompararCierre() {
       .then((j) => {
         if (j.error) throw new Error(j.error);
         setArchivos(j.disponibles);
-        setArchivoActual(j.archivoActual);
-        if (j.disponibles.length > 0) setSeleccionado(j.disponibles[0].nombre);
+        setArchivoActualNombre(j.archivoActual);
+        // Por defecto, el primer archivo que NO es el actual (si hay alguno) — lo más
+        // típico es comparar el archivo en vivo contra otro archivo de un cierre pasado.
+        const sugerido = (j.disponibles as ArchivoParaComparar[]).find((a) => !a.esArchivoActual);
+        if (sugerido) {
+          setItemIdSel(sugerido.itemId);
+          setCerrados(sugerido.cerradosSugeridos);
+        }
       })
       .catch((e) => setError((e as Error).message))
       .finally(() => setCargandoLista(false));
   }, []);
 
+  const archivoSel = useMemo(() => archivos?.find((a) => a.itemId === itemIdSel) ?? null, [archivos, itemIdSel]);
+
+  useEffect(() => {
+    if (!itemIdSel) return;
+    setVersiones(null);
+    setVersionSel(VERSION_ACTUAL);
+    setCargandoVersiones(true);
+    fetch(`/api/capex/versiones-archivo?itemId=${encodeURIComponent(itemIdSel)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j.error) throw new Error(j.error);
+        setVersiones(j.versiones);
+      })
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setCargandoVersiones(false));
+  }, [itemIdSel]);
+
   async function comparar() {
-    if (!seleccionado) return;
+    if (!archivoSel) return;
     setComparando(true);
     setError(null);
     setResultado(null);
     try {
-      const res = await fetch(`/api/capex/comparar-cierre?archivo=${encodeURIComponent(seleccionado)}`, { cache: "no-store" });
+      const version = versionSel !== VERSION_ACTUAL ? versiones?.find((v) => v.id === versionSel) : null;
+      const params = new URLSearchParams({
+        itemId: archivoSel.itemId,
+        nombre: archivoSel.nombre,
+        cerrados: String(cerrados),
+      });
+      if (version) {
+        params.set("versionId", version.id);
+        params.set("fechaVersion", version.fecha);
+      }
+      const res = await fetch(`/api/capex/comparar-cierre?${params.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se pudo comparar.");
       setResultado(json);
@@ -88,36 +140,13 @@ export default function CompararCierre() {
       <div>
         <h2 className="text-lg font-semibold">Comparar con un cierre anterior</h2>
         <p className="text-sm" style={{ color: "var(--texto-suave)" }}>
-          Compara BD_CAPEX en vivo ({archivoActual || "…"}) contra el archivo que quedó guardado la última vez
-          que se usó &quot;Generar archivo de cierre&quot; (o uno más antiguo, si lo eliges) — para ver exactamente
-          qué celda cambió desde entonces, mes por mes.
+          Compara BD_CAPEX en vivo ({archivoActualNombre || "…"}) contra otro archivo de la carpeta, o contra una
+          versión anterior de SharePoint de cualquiera de ellos — útil cuando el archivo que se presentó siguió
+          editándose después, y su contenido más reciente ya no es el que se cerró ese día.
         </p>
       </div>
 
-      {cargandoLista && <p style={{ color: "var(--texto-suave)" }}>Buscando archivos de cierre anteriores…</p>}
-
-      {!cargandoLista && archivos && archivos.length === 0 && (
-        <div className="card p-6 text-center" style={{ color: "var(--texto-suave)" }}>
-          No hay ningún archivo de cierre anterior en la misma carpeta — se generan con el botón
-          &quot;Generar archivo de cierre&quot; en el Dashboard, cada vez que se cierra un mes.
-        </div>
-      )}
-
-      {!cargandoLista && archivos && archivos.length > 0 && (
-        <div className="card p-4 flex flex-wrap items-center gap-3">
-          <span className="etiqueta mb-0">Comparar contra:</span>
-          <select className="campo" style={{ width: "auto", minWidth: 280 }} value={seleccionado} onChange={(e) => setSeleccionado(e.target.value)}>
-            {archivos.map((a) => (
-              <option key={a.nombre} value={a.nombre}>
-                {a.nombre} ({a.cerrados} meses cerrados en ese momento)
-              </option>
-            ))}
-          </select>
-          <button className="boton-primario" onClick={comparar} disabled={comparando}>
-            {comparando ? "Comparando…" : "Comparar"}
-          </button>
-        </div>
-      )}
+      {cargandoLista && <p style={{ color: "var(--texto-suave)" }}>Buscando archivos en la misma carpeta…</p>}
 
       {error && (
         <div className="card p-3 text-sm" style={{ background: "#fbe1ec", color: "var(--peligro)" }}>
@@ -125,13 +154,80 @@ export default function CompararCierre() {
         </div>
       )}
 
+      {!cargandoLista && archivos && archivos.length > 0 && (
+        <div className="card p-4 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="etiqueta mb-0">Archivo:</span>
+            <select className="campo" style={{ width: "auto", minWidth: 280 }} value={itemIdSel} onChange={(e) => {
+              const a = archivos.find((x) => x.itemId === e.target.value);
+              setItemIdSel(e.target.value);
+              setCerrados(a?.cerradosSugeridos ?? 0);
+            }}>
+              {archivos.map((a) => (
+                <option key={a.itemId} value={a.itemId}>
+                  {a.nombre}
+                  {a.esArchivoActual ? " (en vivo)" : ""}
+                </option>
+              ))}
+            </select>
+
+            <span className="etiqueta mb-0">Versión:</span>
+            <select
+              className="campo"
+              style={{ width: "auto", minWidth: 260 }}
+              value={versionSel}
+              onChange={(e) => setVersionSel(e.target.value)}
+              disabled={cargandoVersiones || !versiones}
+            >
+              <option value={VERSION_ACTUAL}>Más reciente (contenido actual del archivo)</option>
+              {versiones?.map((v, i) => (
+                <option key={v.id} value={v.id}>
+                  {new Date(v.fecha).toLocaleString("es-PE")}
+                  {i === versiones.length - 1 ? " (primera versión guardada)" : ""}
+                </option>
+              ))}
+            </select>
+            {cargandoVersiones && (
+              <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
+                Buscando versiones…
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="etiqueta mb-0">Meses ya cerrados en ese punto:</span>
+            <select className="campo" style={{ width: "auto" }} value={cerrados} onChange={(e) => setCerrados(Number(e.target.value))}>
+              <option value={0}>Ninguno</option>
+              {NOMBRES_MES_CIERRE.map((nombre, i) => (
+                <option key={nombre} value={i + 1}>
+                  Hasta {nombre}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs" style={{ color: "var(--texto-suave)" }} title="No siempre coincide con lo que dice el nombre del archivo — ajústalo si ese archivo siguió editándose después de generarse.">
+              (ajústalo si el archivo se siguió editando después de &quot;cerrarse&quot;)
+            </span>
+            <button className="boton-primario ml-auto" onClick={comparar} disabled={comparando || !archivoSel}>
+              {comparando ? "Comparando…" : "Comparar"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {resultado && (
         <>
+          <p className="text-xs" style={{ color: "var(--texto-suave)" }}>
+            Comparado contra: <strong>{resultado.nombreArchivoAnterior}</strong>
+            {resultado.fechaVersionAnterior && ` — versión del ${new Date(resultado.fechaVersionAnterior).toLocaleString("es-PE")}`}
+            {" · "}
+            {resultado.cerradosEnReferencia} mes(es) cerrado(s) en ese punto.
+          </p>
+
           {resultado.proyectosNuevos.length > 0 && (
             <div className="card p-4 text-sm">
               <p className="font-semibold mb-1">{resultado.proyectosNuevos.length} proyecto(s) nuevo(s) desde entonces</p>
               <p style={{ color: "var(--texto-suave)" }}>
-                No existían todavía en {resultado.archivoAnterior}, así que no hay con qué compararlos:{" "}
+                No existían todavía en ese punto de referencia, así que no hay con qué compararlos:{" "}
                 {resultado.proyectosNuevos.join(", ")}.
               </p>
             </div>
@@ -139,7 +235,7 @@ export default function CompararCierre() {
 
           {resultado.cambios.length === 0 ? (
             <div className="card p-6 text-center" style={{ color: "var(--exito)" }}>
-              Ningún proyecto cambió (Presupuesto Aprobado, Real ni Proyectado) desde {resultado.archivoAnterior}.
+              Ningún proyecto cambió (Presupuesto Aprobado, Real ni Proyectado) desde ese punto de referencia.
             </div>
           ) : (
             <div className="card p-0 overflow-hidden">
@@ -148,7 +244,7 @@ export default function CompararCierre() {
                   className="chip"
                   data-activo={soloMesesCerrados}
                   onClick={() => setSoloMesesCerrados((v) => !v)}
-                  title="Muestra solo cambios en un mes que ya estaba cerrado en el archivo anterior — la causa más probable de un indicador que 'se mueve solo'"
+                  title="Muestra solo cambios en un mes que ya estaba cerrado en la referencia — la causa más probable de un indicador que 'se mueve solo'"
                 >
                   {soloMesesCerrados ? "✓ " : ""}Solo meses ya cerrados{totalMesesCerrados > 0 ? ` (${totalMesesCerrados})` : ""}
                 </span>

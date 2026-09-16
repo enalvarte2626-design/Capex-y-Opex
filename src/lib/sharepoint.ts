@@ -179,6 +179,19 @@ export async function listarNombresCarpeta(
   return items.map((i) => i.name);
 }
 
+/** Igual que `listarNombresCarpeta`, pero trayendo también el id de cada archivo — para
+ *  poder abrir directamente su historial de versiones sin tener que resolverlo aparte. */
+export async function listarArchivosCarpeta(
+  config: ConfiguracionSharePoint,
+  driveId: string,
+  carpetaId: string
+): Promise<Array<{ nombre: string; itemId: string }>> {
+  const res = await graphFetch(config, `/drives/${driveId}/items/${carpetaId}/children?$select=id,name`);
+  const datos = await res.json();
+  const items: Array<{ id: string; name: string }> = datos.value ?? [];
+  return items.map((i) => ({ nombre: i.name, itemId: i.id }));
+}
+
 /** Resuelve un archivo por NOMBRE dentro de una carpeta ya conocida (sin necesitar su
  *  propio enlace "compartir") — para poder abrir, por ejemplo, el archivo de un cierre
  *  anterior que quedó guardado al lado del archivo en vivo. */
@@ -230,6 +243,47 @@ export async function descargarContenido(
   archivo: ArchivoResuelto
 ): Promise<Buffer> {
   const res = await graphFetch(config, `/drives/${archivo.driveId}/items/${archivo.itemId}/content`);
+  const arrayBuffer = await res.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+export interface VersionArchivo {
+  id: string;
+  /** Cuándo se guardó esa versión — SharePoint la crea sola cada vez que alguien guarda
+   *  el archivo (no hace falta que nadie la pida a propósito). */
+  fecha: string;
+}
+
+/**
+ * Historial de versiones de UN archivo puntual (no de una copia aparte) — para cuando
+ * lo que cambió no quedó en un archivo de cierre distinto, sino que alguien editó el
+ * MISMO archivo después de "cerrarlo" (ej. siguió escribiendo en "7+5.xlsm" después de
+ * presentarlo, antes de generar "8+4.xlsm" a partir de esa versión ya modificada). Cada
+ * vez que se guarda un archivo de Excel en SharePoint queda una versión nueva sola, sin
+ * que nadie tenga que pedirlo — esto solo las lista. La más reciente (la actual) siempre
+ * viene incluida.
+ */
+export async function listarVersionesArchivo(
+  config: ConfiguracionSharePoint,
+  driveId: string,
+  itemId: string
+): Promise<VersionArchivo[]> {
+  const res = await graphFetch(config, `/drives/${driveId}/items/${itemId}/versions?$select=id,lastModifiedDateTime`);
+  const datos = await res.json();
+  const versiones: Array<{ id: string; lastModifiedDateTime: string }> = datos.value ?? [];
+  return versiones
+    .map((v) => ({ id: v.id, fecha: v.lastModifiedDateTime }))
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+}
+
+/** Descarga el contenido de UNA VERSIÓN puntual (no la actual) de un archivo. */
+export async function descargarVersionArchivo(
+  config: ConfiguracionSharePoint,
+  driveId: string,
+  itemId: string,
+  versionId: string
+): Promise<Buffer> {
+  const res = await graphFetch(config, `/drives/${driveId}/items/${itemId}/versions/${versionId}/content`);
   const arrayBuffer = await res.arrayBuffer();
   return Buffer.from(arrayBuffer);
 }
