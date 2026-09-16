@@ -146,9 +146,58 @@ export interface ArchivoResuelto {
   carpetaId: string;
 }
 
+/** "Control Capex Forecast 7+5.xlsm" → 7 — para elegir automáticamente el archivo con
+ *  más meses cerrados cuando el enlace apunta a una CARPETA en vez de a un archivo. */
+function mesesCerradosPorNombre(nombre: string): number | null {
+  const m = nombre.match(/(\d+)\s*\+\s*(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
 /**
- * Resuelve el enlace "compartir" directamente al archivo (drive + item id), sin
- * necesidad de conocer en qué carpeta vive dentro de SharePoint.
+ * Elige, dentro de una carpeta, cuál archivo es "el vivo" — el de mayor "N" en el
+ * patrón "N+M" (más meses cerrados, el más reciente de ese ciclo mensual). Si ningún
+ * archivo sigue ese patrón (ej. la carpeta de OPEX, que no lo usa), cae en el más
+ * recientemente modificado — un valor por defecto razonable para cualquier carpeta.
+ */
+async function elegirArchivoVivoDeCarpeta(
+  config: ConfiguracionSharePoint,
+  driveId: string,
+  carpetaId: string
+): Promise<{ id: string; name: string }> {
+  const res = await graphFetch(
+    config,
+    `/drives/${driveId}/items/${carpetaId}/children?$select=id,name,lastModifiedDateTime,file`
+  );
+  const datos = await res.json();
+  const archivos: Array<{ id: string; name: string; lastModifiedDateTime: string; file?: unknown }> = (
+    datos.value ?? []
+  ).filter((i: { file?: unknown; name: string }) => i.file && /\.xlsm$|\.xlsx$|\.xls$/i.test(i.name));
+
+  if (archivos.length === 0) {
+    throw new ErrorSharePoint(`La carpeta compartida no tiene ningún archivo de Excel dentro.`);
+  }
+
+  const conPatron = archivos
+    .map((a) => ({ a, cerrados: mesesCerradosPorNombre(a.name) }))
+    .filter((x): x is { a: typeof archivos[number]; cerrados: number } => x.cerrados !== null);
+
+  const elegido =
+    conPatron.length > 0
+      ? conPatron.reduce((mejor, actual) => (actual.cerrados > mejor.cerrados ? actual : mejor)).a
+      : archivos.reduce((mejor, actual) =>
+          new Date(actual.lastModifiedDateTime).getTime() > new Date(mejor.lastModifiedDateTime).getTime() ? actual : mejor
+        );
+
+  return { id: elegido.id, name: elegido.name };
+}
+
+/**
+ * Resuelve el enlace "compartir" al archivo en vivo (drive + item id). El enlace puede
+ * apuntar directo a UN archivo (comportamiento de siempre) o a la CARPETA que lo
+ * contiene — en ese caso, elige sola cuál de los archivos de ahí adentro es "el vivo"
+ * (ver `elegirArchivoVivoDeCarpeta`), así generar un archivo de cierre nuevo (ej. "8+4"
+ * a partir de "7+5") no exige volver a compartir ni actualizar ninguna variable de
+ * entorno cada vez — apuntar el enlace a la carpeta UNA sola vez alcanza para siempre.
  */
 export async function resolverArchivoPorShareUrl(
   config: ConfiguracionSharePoint
@@ -156,9 +205,17 @@ export async function resolverArchivoPorShareUrl(
   const shareId = codificarShareUrl(config.shareUrl.trim());
   const res = await graphFetch(
     config,
-    `/shares/${shareId}/driveItem?$select=id,name,parentReference`
+    `/shares/${shareId}/driveItem?$select=id,name,parentReference,folder`
   );
   const datos = await res.json();
+
+  if (datos.folder) {
+    const driveId = datos.parentReference?.driveId as string;
+    const carpetaId = datos.id as string;
+    const elegido = await elegirArchivoVivoDeCarpeta(config, driveId, carpetaId);
+    return { driveId, itemId: elegido.id, nombre: elegido.name, carpetaId };
+  }
+
   return {
     driveId: datos.parentReference?.driveId as string,
     itemId: datos.id as string,
