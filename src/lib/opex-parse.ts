@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import type { ProyectoCapex } from "./capex";
 import { TIPO_CAMBIO_POR_DEFECTO } from "./opex-constantes";
 import { detectarAdvertencias } from "./validacionPresupuesto";
+import { resolverNombreHoja } from "./capex-parse";
 
 /**
  * Índices de columna (0-based) de "Presupuesto 2026" — el equivalente a BD_CAPEX para
@@ -111,11 +112,11 @@ function aTexto(valor: unknown): string {
   return String(valor ?? "").trim();
 }
 
-function filasDeHoja(wb: XLSX.WorkBook, nombreHoja: string): unknown[][] {
-  const hoja = wb.Sheets[nombreHoja];
+function filasDeHoja(wb: XLSX.WorkBook, nombreHojaPedida: string): unknown[][] {
+  const hoja = wb.Sheets[resolverNombreHoja(wb, nombreHojaPedida)];
   if (!hoja) {
     const disponibles = wb.SheetNames.join(", ");
-    throw new Error(`No se encontró la hoja "${nombreHoja}" en el archivo. Hojas disponibles: ${disponibles}.`);
+    throw new Error(`No se encontró la hoja "${nombreHojaPedida}" en el archivo. Hojas disponibles: ${disponibles}.`);
   }
   return XLSX.utils.sheet_to_json(hoja, { header: 1, raw: true, defval: "" });
 }
@@ -231,7 +232,7 @@ export interface FacturaOpex {
 /** Extrae "Facturas Opex - App" — si la hoja todavía no existe (nadie ha registrado
  *  ninguna factura desde la app todavía), devuelve una lista vacía. */
 export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): FacturaOpex[] {
-  const hoja = wb.Sheets[nombreHoja];
+  const hoja = wb.Sheets[resolverNombreHoja(wb, nombreHoja)];
   if (!hoja) return [];
   const filas = XLSX.utils.sheet_to_json(hoja, { header: 1, raw: true, defval: "" }) as unknown[][];
   const facturas: FacturaOpex[] = [];

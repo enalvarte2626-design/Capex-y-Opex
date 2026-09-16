@@ -133,18 +133,34 @@ export function leerWorkbook(bufer: Buffer): XLSX.WorkBook {
   return XLSX.read(bufer, { type: "buffer", cellDates: true });
 }
 
-function filasDeHoja(wb: XLSX.WorkBook, nombreHoja: string): unknown[][] {
+/**
+ * Encuentra el nombre EXACTO de la hoja tal cual está en el archivo, sin importar
+ * mayúsculas/minúsculas — Excel no distingue nombres de hoja por may/min ("BD_CAPEX" y
+ * "bd_capex" son la misma hoja para Excel), pero el objeto de SheetJS sí busca por clave
+ * exacta. Sin esto, un nombre de hoja configurado con una capitalización distinta a la
+ * real (ej. la variable de entorno dice "Proyeccion 2026_vm" pero la hoja real se llama
+ * "PROYECCION 2026_VM") hacía fallar la carga entera del dashboard con "no se encontró
+ * la hoja", aunque la hoja sí estuviera ahí. Exportada para que opex-parse.ts la reuse.
+ */
+export function resolverNombreHoja(wb: XLSX.WorkBook, nombreHoja: string): string {
+  if (wb.Sheets[nombreHoja]) return nombreHoja;
+  const real = wb.SheetNames.find((n) => n.toLowerCase() === nombreHoja.trim().toLowerCase());
+  return real ?? nombreHoja;
+}
+
+function filasDeHoja(wb: XLSX.WorkBook, nombreHojaPedida: string): unknown[][] {
+  const nombreHoja = resolverNombreHoja(wb, nombreHojaPedida);
   const hoja = wb.Sheets[nombreHoja];
   if (!hoja) {
     const disponibles = wb.SheetNames.join(", ");
-    throw new Error(`No se encontró la hoja "${nombreHoja}" en el archivo. Hojas disponibles: ${disponibles}.`);
+    throw new Error(`No se encontró la hoja "${nombreHojaPedida}" en el archivo. Hojas disponibles: ${disponibles}.`);
   }
   return XLSX.utils.sheet_to_json(hoja, { header: 1, raw: true, defval: "" });
 }
 
 /** Última fila (1-based) con datos en la hoja, según el rango usado del Excel. */
-export function ultimaFilaConDatos(wb: XLSX.WorkBook, nombreHoja: string): number {
-  const hoja = wb.Sheets[nombreHoja];
+export function ultimaFilaConDatos(wb: XLSX.WorkBook, nombreHojaPedida: string): number {
+  const hoja = wb.Sheets[resolverNombreHoja(wb, nombreHojaPedida)];
   if (!hoja || !hoja["!ref"]) return 1;
   const rango = XLSX.utils.decode_range(hoja["!ref"]);
   return rango.e.r + 1; // decode_range es 0-based
@@ -246,7 +262,7 @@ export function extraerFacturas(wb: XLSX.WorkBook, nombreHoja: string): FacturaC
 
 /** Lee una celda cruda tal cual está (fórmula con "=" adelante, o su valor literal). */
 export function leerCeldaCruda(wb: XLSX.WorkBook, nombreHoja: string, direccion: string): string | number {
-  const hoja = wb.Sheets[nombreHoja];
+  const hoja = wb.Sheets[resolverNombreHoja(wb, nombreHoja)];
   const celda = hoja?.[direccion];
   if (!celda) return "";
   if (celda.f) return `=${celda.f}`;
