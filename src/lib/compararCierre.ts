@@ -95,6 +95,10 @@ export interface CambioLinea {
 
 export interface ResumenGrupo {
   grupoNegocio: string;
+  presupuestoAprobadoAntes: number;
+  presupuestoAprobadoAhora: number;
+  forecastAntes: number;
+  forecastAhora: number;
   /** Diferencia total del grupo en el punto de referencia (Presupuesto Aprobado menos
    *  lo ejecutado/proyectado en ese momento) — negativo = ya se había sobrepasado el
    *  presupuesto; positivo = quedaba margen (ahorro). */
@@ -120,24 +124,38 @@ export interface ResultadoComparacion {
   totalCambio: number;
 }
 
-/** Presupuesto Aprobado − Gasto Real − Forecast, igual fórmula que ya usa el Dashboard
- *  (resolverProyecto en lib/capex.ts) — acá recalculada aparte porque compararCierre.ts
- *  trabaja con `ProyectoCapex` crudo (sin resolver), y cada snapshot puede tener su
- *  propio "meses cerrados" distinto. */
-function diferenciaProyecto(p: { presupuestoAprobado: number; real: number[]; proyectado: number[] }, cerrados: number): number {
-  const gastoReal = p.real.reduce((a, b) => a + b, 0);
-  const forecast = p.proyectado.slice(cerrados).reduce((a, b) => a + b, 0);
-  return p.presupuestoAprobado - gastoReal - forecast;
+interface TotalesProyecto {
+  presupuestoAprobado: number;
+  gastoReal: number;
+  forecast: number;
+  diferencia: number;
 }
 
-function sumarDiferenciaPorGrupo(
+/** Presupuesto Aprobado, Gasto Real, Forecast y Diferencia — misma fórmula que ya usa el
+ *  Dashboard (resolverProyecto en lib/capex.ts) — recalculada aparte porque
+ *  compararCierre.ts trabaja con `ProyectoCapex` crudo (sin resolver), y cada snapshot
+ *  puede tener su propio "meses cerrados" distinto. */
+function totalesProyecto(p: { presupuestoAprobado: number; real: number[]; proyectado: number[] }, cerrados: number): TotalesProyecto {
+  const gastoReal = p.real.reduce((a, b) => a + b, 0);
+  const forecast = p.proyectado.slice(cerrados).reduce((a, b) => a + b, 0);
+  return { presupuestoAprobado: p.presupuestoAprobado, gastoReal, forecast, diferencia: p.presupuestoAprobado - gastoReal - forecast };
+}
+
+function sumarPorGrupo(
   proyectos: Array<{ grupoNegocio: string; presupuestoAprobado: number; real: number[]; proyectado: number[] }>,
   cerrados: number
-): Map<string, number> {
-  const mapa = new Map<string, number>();
+): Map<string, TotalesProyecto> {
+  const mapa = new Map<string, TotalesProyecto>();
   for (const p of proyectos) {
     const clave = p.grupoNegocio || "SIN GRUPO";
-    mapa.set(clave, (mapa.get(clave) ?? 0) + diferenciaProyecto(p, cerrados));
+    const t = totalesProyecto(p, cerrados);
+    const acc = mapa.get(clave) ?? { presupuestoAprobado: 0, gastoReal: 0, forecast: 0, diferencia: 0 };
+    mapa.set(clave, {
+      presupuestoAprobado: acc.presupuestoAprobado + t.presupuestoAprobado,
+      gastoReal: acc.gastoReal + t.gastoReal,
+      forecast: acc.forecast + t.forecast,
+      diferencia: acc.diferencia + t.diferencia,
+    });
   }
   return mapa;
 }
@@ -243,14 +261,24 @@ export async function compararConReferencia(
   // Los cambios en meses ya cerrados (la causa más probable de lo que se busca) primero.
   cambios.sort((a, b) => (a.eraMesCerrado === b.eraMesCerrado ? 0 : a.eraMesCerrado ? -1 : 1));
 
-  const antesPorGrupo = sumarDiferenciaPorGrupo(proyectosAnteriores, cerradosEnReferencia);
-  const ahoraPorGrupo = sumarDiferenciaPorGrupo(proyectosActuales, cerradosActual);
+  const antesPorGrupo = sumarPorGrupo(proyectosAnteriores, cerradosEnReferencia);
+  const ahoraPorGrupo = sumarPorGrupo(proyectosActuales, cerradosActual);
   const gruposTodos = new Set([...antesPorGrupo.keys(), ...ahoraPorGrupo.keys()]);
+  const vacio: TotalesProyecto = { presupuestoAprobado: 0, gastoReal: 0, forecast: 0, diferencia: 0 };
   const resumenPorGrupo: ResumenGrupo[] = Array.from(gruposTodos)
     .map((grupoNegocio) => {
-      const diferenciaAntes = antesPorGrupo.get(grupoNegocio) ?? 0;
-      const diferenciaAhora = ahoraPorGrupo.get(grupoNegocio) ?? 0;
-      return { grupoNegocio, diferenciaAntes, diferenciaAhora, cambio: diferenciaAhora - diferenciaAntes };
+      const antes = antesPorGrupo.get(grupoNegocio) ?? vacio;
+      const ahora = ahoraPorGrupo.get(grupoNegocio) ?? vacio;
+      return {
+        grupoNegocio,
+        presupuestoAprobadoAntes: antes.presupuestoAprobado,
+        presupuestoAprobadoAhora: ahora.presupuestoAprobado,
+        forecastAntes: antes.forecast,
+        forecastAhora: ahora.forecast,
+        diferenciaAntes: antes.diferencia,
+        diferenciaAhora: ahora.diferencia,
+        cambio: ahora.diferencia - antes.diferencia,
+      };
     })
     .sort((a, b) => Math.abs(b.cambio) - Math.abs(a.cambio));
 

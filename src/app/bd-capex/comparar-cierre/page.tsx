@@ -32,6 +32,10 @@ interface CambioLinea {
 
 interface ResumenGrupo {
   grupoNegocio: string;
+  presupuestoAprobadoAntes: number;
+  presupuestoAprobadoAhora: number;
+  forecastAntes: number;
+  forecastAhora: number;
   diferenciaAntes: number;
   diferenciaAhora: number;
   cambio: number;
@@ -313,17 +317,51 @@ export default function CompararCierre() {
               <table className="text-xs border-collapse w-full">
                 <thead>
                   <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
-                    <th className="py-1.5 px-3 font-semibold">Grupo</th>
-                    <th className="py-1.5 px-3 font-semibold text-center">Antes</th>
-                    <th className="py-1.5 px-3 font-semibold text-center">Ahora</th>
-                    <th className="py-1.5 px-3 font-semibold text-center">Cambio</th>
+                    <th className="py-1.5 px-3 font-semibold" rowSpan={2}>
+                      Grupo
+                    </th>
+                    <th className="py-1.5 px-3 font-semibold text-center" colSpan={2} style={{ borderLeft: "1px solid var(--borde)" }}>
+                      Presupuesto Aprobado
+                    </th>
+                    <th className="py-1.5 px-3 font-semibold text-center" colSpan={2} style={{ borderLeft: "1px solid var(--borde)" }}>
+                      Forecast
+                    </th>
+                    <th className="py-1.5 px-3 font-semibold text-center" colSpan={3} style={{ borderLeft: "1px solid var(--borde)" }}>
+                      Diferencia
+                    </th>
+                  </tr>
+                  <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
+                    <th className="py-1 px-3 font-normal text-center" style={{ borderLeft: "1px solid var(--borde)" }}>
+                      Antes
+                    </th>
+                    <th className="py-1 px-3 font-normal text-center">Ahora</th>
+                    <th className="py-1 px-3 font-normal text-center" style={{ borderLeft: "1px solid var(--borde)" }}>
+                      Antes
+                    </th>
+                    <th className="py-1 px-3 font-normal text-center">Ahora</th>
+                    <th className="py-1 px-3 font-normal text-center" style={{ borderLeft: "1px solid var(--borde)" }}>
+                      Antes
+                    </th>
+                    <th className="py-1 px-3 font-normal text-center">Ahora</th>
+                    <th className="py-1 px-3 font-normal text-center">Cambio</th>
                   </tr>
                 </thead>
                 <tbody>
                   {resultado.resumenPorGrupo.map((g) => (
                     <tr key={g.grupoNegocio} style={{ borderTop: "1px solid var(--borde)" }}>
                       <td className="py-1.5 px-3 font-semibold">{g.grupoNegocio}</td>
-                      <td className="py-1.5 px-3 text-center whitespace-nowrap" style={{ color: g.diferenciaAntes < 0 ? "var(--peligro)" : undefined }}>
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap" style={{ borderLeft: "1px solid var(--borde)" }}>
+                        {moneda2(g.presupuestoAprobadoAntes)}
+                      </td>
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap">{moneda2(g.presupuestoAprobadoAhora)}</td>
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap" style={{ borderLeft: "1px solid var(--borde)" }}>
+                        {moneda2(g.forecastAntes)}
+                      </td>
+                      <td className="py-1.5 px-3 text-center whitespace-nowrap">{moneda2(g.forecastAhora)}</td>
+                      <td
+                        className="py-1.5 px-3 text-center whitespace-nowrap"
+                        style={{ borderLeft: "1px solid var(--borde)", color: g.diferenciaAntes < 0 ? "var(--peligro)" : undefined }}
+                      >
                         {moneda2(g.diferenciaAntes)}
                       </td>
                       <td className="py-1.5 px-3 text-center whitespace-nowrap" style={{ color: g.diferenciaAhora < 0 ? "var(--peligro)" : undefined }}>
