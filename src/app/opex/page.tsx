@@ -691,14 +691,14 @@ function ForecastPorGrupoOpexSection({
         cuánto se va a necesitar todavía por grupo de gasto.
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
         {porGrupo.map((g) => (
           <button
             key={g.grupo}
             type="button"
             onClick={() => setGrupoAbierto(g.grupo)}
             disabled={g.items.length === 0}
-            className="rounded-lg p-3 text-left"
+            className="rounded-lg p-2 text-left"
             style={{
               background: "var(--acento-suave)",
               cursor: g.items.length === 0 ? "default" : "pointer",
@@ -706,16 +706,15 @@ function ForecastPorGrupoOpexSection({
             }}
             title={g.items.length > 0 ? "Toca para ver el detalle" : undefined}
           >
-            <p className="text-2xl font-bold" style={{ color: AZUL_TEMPLATE }}>
+            <p className="text-lg font-bold leading-tight" style={{ color: AZUL_TEMPLATE }}>
               {moneda2(g.totalForecast)}
             </p>
-            <MontoSoles valorUsd={g.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs" />
-            <p className="text-sm font-semibold">
+            <p className="text-xs font-semibold truncate">
               {g.grupo} · {g.items.length} línea(s)
             </p>
             {g.items[0] && (
-              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
-                Más alta: <strong>{g.items[0].proyecto || "—"}</strong> ({moneda2(g.items[0].forecast)})
+              <p className="text-xs truncate" style={{ color: "var(--texto-suave)" }} title={g.items[0].proyecto}>
+                Más alta: {g.items[0].proyecto || "—"} ({moneda2(g.items[0].forecast)})
               </p>
             )}
           </button>
