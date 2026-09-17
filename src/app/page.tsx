@@ -23,6 +23,7 @@ import {
   estaSuspendido,
   filtrarPorPrioridad,
   gastoPorGrupoNegocio,
+  mesesConForecast,
   panoramaTrimestral,
   prioridadesDisponibles,
   resolverProyectos,
@@ -1048,27 +1049,6 @@ function ProyectosSobrepasadosSection({
  * BD_CAPEX a sumarlo a mano. Solo entran proyectos con Forecast > 0 (uno en $0 no
  * necesita más plata, no aporta nada a esta vista).
  */
-/** T1 = Ene-Mar, T2 = Abr-Jun, T3 = Jul-Sep, T4 = Oct-Dic. */
-function trimestreDeMes(indiceMes: number): number {
-  return Math.floor(indiceMes / 3) + 1;
-}
-
-/** De los meses que todavía son Forecast (desde `mesCierre` en adelante), cuáles
- *  concretamente tienen algo proyectado (>0) — y en qué trimestre(s) caen. Un proyecto
- *  puede repartir su Forecast en varios meses/trimestres a la vez. */
-function mesesConForecast(p: { proyectado: number[] }, mesCierre: number): { meses: string; trimestres: string } {
-  const indices: number[] = [];
-  for (let m = mesCierre; m < 12; m++) {
-    if (p.proyectado[m] > 0.005) indices.push(m);
-  }
-  const meses = indices.map((m) => NOMBRES_MES[m]).join(", ");
-  const trimestres = Array.from(new Set(indices.map(trimestreDeMes)))
-    .sort((a, b) => a - b)
-    .map((t) => `T${t}`)
-    .join(", ");
-  return { meses: meses || "—", trimestres: trimestres || "—" };
-}
-
 function ForecastPorGrupoSection({
   proyectos,
   mesCierre,

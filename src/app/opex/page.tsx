@@ -17,6 +17,7 @@ import {
   NOMBRES_MES_CIERRE,
   gastoPorGrupoNegocio,
   mesesATrimestres,
+  mesesConForecast,
   panoramaTrimestral,
   prioridadesDisponibles,
   resolverProyectos,
@@ -273,6 +274,13 @@ export default function DashboardOpex() {
       </div>
 
       <AdvertenciasDatosSection filtradas={filtradas} />
+
+      <ForecastPorGrupoOpexSection
+        lineas={filtradas}
+        mesCierre={mesCierre}
+        mostrarSoles={mostrarSoles}
+        tipoCambio={tipoCambio}
+      />
 
       <TablaLineasOpex filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
 
@@ -635,6 +643,167 @@ function AdvertenciasDatosSection({ filtradas }: { filtradas: ReturnType<typeof 
                   </ul>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cuánta plata falta por gastar (Forecast) por línea presupuestal, agrupado por Grupo
+ * de Gasto — mismo indicador que ya existe en el Dashboard CAPEX, adaptado a OPEX. En
+ * qué trimestre(s)/mes(es) concretos cae ese Forecast, y cuál es la línea presupuestal
+ * más alta de cada grupo (marcada aparte, no solo por ir primero en la lista).
+ */
+function ForecastPorGrupoOpexSection({
+  lineas,
+  mesCierre,
+  mostrarSoles,
+  tipoCambio,
+}: {
+  lineas: ProyectoResuelto[];
+  mesCierre: number;
+  mostrarSoles: boolean;
+  tipoCambio: number;
+}) {
+  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null);
+
+  const grupos = Array.from(new Set(lineas.map((l) => l.grupoNegocio))).sort((a, b) => a.localeCompare(b, "es"));
+  const porGrupo = grupos.map((grupo) => {
+    const items = lineas
+      .filter((l) => l.grupoNegocio === grupo && l.forecast > 0.005)
+      .sort((a, b) => b.forecast - a.forecast); // la que más plata necesita todavía, primero
+    const totalForecast = items.reduce((a, l) => a + l.forecast, 0);
+    return { grupo, items, totalForecast };
+  });
+
+  const grupoModal = porGrupo.find((g) => g.grupo === grupoAbierto);
+
+  if (porGrupo.every((g) => g.items.length === 0)) return null;
+
+  return (
+    <div className="card p-4">
+      <h2 className="font-semibold mb-4">Forecast por línea presupuestal, por grupo de gasto</h2>
+      <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
+        Cuánta plata falta por gastar (proyectado en los meses que quedan) en cada línea presupuestal — para saber
+        cuánto se va a necesitar todavía por grupo de gasto.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {porGrupo.map((g) => (
+          <button
+            key={g.grupo}
+            type="button"
+            onClick={() => setGrupoAbierto(g.grupo)}
+            disabled={g.items.length === 0}
+            className="rounded-lg p-3 text-left"
+            style={{
+              background: "var(--acento-suave)",
+              cursor: g.items.length === 0 ? "default" : "pointer",
+              opacity: g.items.length === 0 ? 0.5 : 1,
+            }}
+            title={g.items.length > 0 ? "Toca para ver el detalle" : undefined}
+          >
+            <p className="text-2xl font-bold" style={{ color: AZUL_TEMPLATE }}>
+              {moneda2(g.totalForecast)}
+            </p>
+            <MontoSoles valorUsd={g.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs" />
+            <p className="text-sm font-semibold">
+              {g.grupo} · {g.items.length} línea(s)
+            </p>
+            {g.items[0] && (
+              <p className="text-xs mt-1" style={{ color: "var(--texto-suave)" }}>
+                Más alta: <strong>{g.items[0].proyecto || "—"}</strong> ({moneda2(g.items[0].forecast)})
+              </p>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {grupoModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-6"
+          style={{ background: "rgba(0,0,0,0.4)", zIndex: 50 }}
+          onClick={() => setGrupoAbierto(null)}
+        >
+          <div
+            className="card p-4 w-full flex flex-col"
+            style={{ maxWidth: 900, maxHeight: "85vh", background: "var(--card)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <h2 className="font-semibold">
+                {grupoModal.grupo} — Forecast por línea presupuestal ({grupoModal.items.length})
+              </h2>
+              <button
+                className="text-xl leading-none px-2"
+                style={{ color: "var(--texto-suave)" }}
+                onClick={() => setGrupoAbierto(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ overflow: "auto" }}>
+              <table className="w-full text-sm border-collapse">
+                <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                  <tr className="text-left" style={{ color: "var(--texto-suave)", background: "var(--card)" }}>
+                    <th className="py-2 pr-4 font-semibold">Línea presupuestal</th>
+                    <th className="py-2 pr-4 font-semibold">Detalle</th>
+                    <th className="py-2 pr-4 font-semibold">Trimestre(s)</th>
+                    <th className="py-2 pr-4 font-semibold">Meses</th>
+                    <th className="py-2 px-3 text-right font-semibold">Forecast</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grupoModal.items.map((l, i) => {
+                    const { meses, trimestres } = mesesConForecast(l, mesCierre);
+                    const esLaMasAlta = i === 0;
+                    return (
+                      <tr key={l.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
+                        <td className="py-1.5 pr-4 font-semibold">
+                          {l.proyecto}
+                          {esLaMasAlta && (
+                            <span
+                              className="ml-2 text-xs font-semibold rounded-full px-2 py-0.5"
+                              style={{ background: "#fbe1ec", color: ROSA_TEMPLATE }}
+                            >
+                              más alta
+                            </span>
+                          )}
+                        </td>
+                        <td
+                          className="py-1.5 pr-4"
+                          style={{ color: "var(--texto-suave)", maxWidth: 240 }}
+                          title={l.detalle}
+                        >
+                          {l.detalle || "—"}
+                        </td>
+                        <td className="py-1.5 pr-4 whitespace-nowrap">{trimestres}</td>
+                        <td className="py-1.5 pr-4 whitespace-nowrap" style={{ color: "var(--texto-suave)" }}>
+                          {meses}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-bold" style={{ color: AZUL_TEMPLATE }}>
+                          {moneda2(l.forecast)}
+                          <MontoSoles valorUsd={l.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot style={{ position: "sticky", bottom: 0, zIndex: 1 }}>
+                  <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
+                    <td className="py-2 pr-4 font-bold" colSpan={4}>
+                      Total
+                    </td>
+                    <td className="py-2 px-3 text-right font-bold" style={{ color: AZUL_TEMPLATE }}>
+                      {moneda2(grupoModal.totalForecast)}
+                      <MontoSoles valorUsd={grupoModal.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>
