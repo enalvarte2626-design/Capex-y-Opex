@@ -181,9 +181,21 @@ async function elegirArchivoVivoDeCarpeta(
     .map((a) => ({ a, cerrados: mesesCerradosPorNombre(a.name) }))
     .filter((x): x is { a: typeof archivos[number]; cerrados: number } => x.cerrados !== null);
 
+  // Si dos archivos empatan en el mismo "N" más alto (ej. un duplicado o una copia de
+  // respaldo con el mismo patrón en el nombre), el desempate es por el modificado más
+  // recientemente — nunca "el primero que Graph devuelva", porque Microsoft Graph NO
+  // garantiza un orden estable al listar los archivos de una carpeta entre una consulta
+  // y la siguiente, y con un reduce por posición eso podía hacer que la app eligiera un
+  // archivo distinto de un momento a otro sin que nadie tocara nada.
   const elegido =
     conPatron.length > 0
-      ? conPatron.reduce((mejor, actual) => (actual.cerrados > mejor.cerrados ? actual : mejor)).a
+      ? conPatron.reduce((mejor, actual) => {
+          if (actual.cerrados > mejor.cerrados) return actual;
+          if (actual.cerrados < mejor.cerrados) return mejor;
+          return new Date(actual.a.lastModifiedDateTime).getTime() > new Date(mejor.a.lastModifiedDateTime).getTime()
+            ? actual
+            : mejor;
+        }).a
       : archivos.reduce((mejor, actual) =>
           new Date(actual.lastModifiedDateTime).getTime() > new Date(mejor.lastModifiedDateTime).getTime() ? actual : mejor
         );
