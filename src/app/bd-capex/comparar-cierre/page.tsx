@@ -78,6 +78,7 @@ export default function CompararCierre() {
   const [resultado, setResultado] = useState<ResultadoComparacion | null>(null);
   const [soloMesesCerrados, setSoloMesesCerrados] = useState(false);
   const [grupoSel, setGrupoSel] = useState("");
+  const [soloPrioridad12, setSoloPrioridad12] = useState(false);
 
   useEffect(() => {
     fetch("/api/capex/cierres-disponibles", { cache: "no-store" })
@@ -130,6 +131,7 @@ export default function CompararCierre() {
         cerrados: String(cerrados),
         cerradosActual: String(cerradosActual),
       });
+      if (soloPrioridad12) params.set("prioridades", "1,2");
       if (version) {
         params.set("versionId", version.id);
         params.set("fechaVersion", version.fecha);
@@ -251,6 +253,14 @@ export default function CompararCierre() {
             </select>
             <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
               — para calcular el resumen por Grupo de Negocio (abajo)
+            </span>
+            <span
+              className="chip"
+              data-activo={soloPrioridad12}
+              onClick={() => setSoloPrioridad12((v) => !v)}
+              title="Deja completamente afuera de la comparación (cambios, proyectos nuevos y resumen por grupo) cualquier proyecto que no sea Prioridad 1 o 2"
+            >
+              {soloPrioridad12 ? "✓ " : ""}Solo Prioridad 1 y 2
             </span>
             <button className="boton-primario ml-auto" onClick={comparar} disabled={comparando || !archivoSel}>
               {comparando ? "Comparando…" : "Comparar"}

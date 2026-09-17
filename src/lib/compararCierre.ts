@@ -159,7 +159,11 @@ export async function compararConReferencia(
   hoja: string,
   referencia: { driveId: string; itemId: string; nombre: string; versionId?: string; fechaVersion?: string },
   cerradosEnReferencia: number,
-  cerradosActual: number
+  cerradosActual: number,
+  /** Si viene, solo se comparan los proyectos cuya Prioridad (tal cual el texto en
+   *  Excel, ej. "1", "2") esté en esta lista — el resto queda completamente afuera de
+   *  cambios, proyectosNuevos y el resumen por grupo, no solo escondido en la pantalla. */
+  prioridades?: string[]
 ): Promise<ResultadoComparacion> {
   const [contenidoActual, contenidoAnterior] = await Promise.all([
     descargarContenido(config, archivoActual),
@@ -168,8 +172,12 @@ export async function compararConReferencia(
       : descargarContenido(config, { driveId: referencia.driveId, itemId: referencia.itemId, nombre: referencia.nombre, carpetaId: "" }),
   ]);
 
-  const proyectosActuales = extraerProyectos(leerWorkbook(contenidoActual), hoja);
-  const proyectosAnteriores = extraerProyectos(leerWorkbook(contenidoAnterior), hoja);
+  const filtroPrioridad = prioridades && prioridades.length > 0 ? new Set(prioridades.map((p) => p.trim())) : null;
+  const filtrarPrioridad = <T extends { prioridad: string }>(lista: T[]): T[] =>
+    filtroPrioridad ? lista.filter((p) => filtroPrioridad.has(p.prioridad.trim())) : lista;
+
+  const proyectosActuales = filtrarPrioridad(extraerProyectos(leerWorkbook(contenidoActual), hoja));
+  const proyectosAnteriores = filtrarPrioridad(extraerProyectos(leerWorkbook(contenidoAnterior), hoja));
 
   // Mapa por Proyecto+Detalle (no por número de fila — ver el comentario de
   // claveProyecto). Si dos proyectos de "antes" comparten la misma clave (nombre y

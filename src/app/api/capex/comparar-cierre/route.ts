@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
  * Compara BD_CAPEX en vivo contra un punto de referencia: ?itemId=... (archivo, obligatorio),
  * &nombre=... (para mostrar), &versionId=... (opcional — si no viene, usa el contenido
  * MÁS RECIENTE de ese archivo), &fechaVersion=... (opcional, solo para mostrar) y
- * &cerrados=N (cuántos meses estaban cerrados en ese punto de referencia) y
- * &cerradosActual=N (cuántos meses están cerrados HOY, para el resumen por grupo).
+ * &cerrados=N (cuántos meses estaban cerrados en ese punto de referencia),
+ * &cerradosActual=N (cuántos meses están cerrados HOY, para el resumen por grupo) y
+ * &prioridades=1,2 (opcional — si viene, solo compara esas Prioridades).
  */
 export async function GET(req: NextRequest) {
   const config = obtenerConfiguracionSharePoint();
@@ -24,6 +25,8 @@ export async function GET(req: NextRequest) {
   const fechaVersion = req.nextUrl.searchParams.get("fechaVersion")?.trim() || undefined;
   const cerrados = Number(req.nextUrl.searchParams.get("cerrados") ?? "0");
   const cerradosActual = Number(req.nextUrl.searchParams.get("cerradosActual") ?? "0");
+  const prioridadesTexto = req.nextUrl.searchParams.get("prioridades")?.trim();
+  const prioridades = prioridadesTexto ? prioridadesTexto.split(",").map((p) => p.trim()).filter(Boolean) : undefined;
 
   if (!itemId || !nombre) {
     return NextResponse.json({ error: "Falta indicar contra qué archivo comparar." }, { status: 400 });
@@ -44,7 +47,8 @@ export async function GET(req: NextRequest) {
       hoja,
       { driveId: archivo.driveId, itemId, nombre, versionId, fechaVersion },
       cerrados,
-      cerradosActual
+      cerradosActual,
+      prioridades
     );
     return NextResponse.json(resultado);
   } catch (e) {
