@@ -16,6 +16,20 @@ const NOMBRES_MES = [
 /** Umbral para no marcar como "cambio" un ruido de redondeo de centavos. */
 const TOLERANCIA = 0.005;
 
+const RANGO_DIACRITICOS = /[̀-ͯ]/g;
+
+/** Clave de identidad de un proyecto: Proyecto + Detalle, normalizado — el mismo
+ *  criterio que ya usa el resto de la app para cruzar BD_CAPEX contra otra hoja (ver
+ *  normalizarNombreProyecto en app/page.tsx). NO se usa el número de fila para
+ *  identificar un proyecto entre dos archivos: si alguien inserta una fila, borra una,
+ *  u ordena la hoja en Excel entre un cierre y el siguiente, el mismo número de fila
+ *  puede terminar apuntando a un proyecto totalmente distinto, y comparar "fila 15 de
+ *  antes" contra "fila 15 de ahora" mezclaría dos proyectos sin que nadie se entere. */
+function claveProyecto(p: { proyecto: string; detalle: string }): string {
+  const normalizar = (t: string) => t.trim().toLowerCase().normalize("NFD").replace(RANGO_DIACRITICOS, "");
+  return `${normalizar(p.proyecto)}|${normalizar(p.detalle)}`;
+}
+
 /** "Control Capex Forecast 7+5.xlsm" → 7 (meses cerrados según el nombre del archivo) —
  *  solo un punto de partida sugerido: la persona puede ajustarlo a mano, porque un
  *  ARCHIVO puede seguir editándose después de generarse (como pasó acá: se editó "7+5"
@@ -156,13 +170,23 @@ export async function compararConReferencia(
 
   const proyectosActuales = extraerProyectos(leerWorkbook(contenidoActual), hoja);
   const proyectosAnteriores = extraerProyectos(leerWorkbook(contenidoAnterior), hoja);
-  const mapaAnterior = new Map(proyectosAnteriores.map((p) => [p.filaExcel, p]));
+
+  // Mapa por Proyecto+Detalle (no por número de fila — ver el comentario de
+  // claveProyecto). Si dos proyectos de "antes" comparten la misma clave (nombre y
+  // detalle idénticos, algo raro pero posible), se marca como ambigua (null) para NO
+  // arriesgarse a cruzar dos proyectos distintos por error — esa línea simplemente no
+  // se compara, en vez de comparar mal.
+  const mapaAnterior = new Map<string, (typeof proyectosAnteriores)[number] | null>();
+  for (const p of proyectosAnteriores) {
+    const clave = claveProyecto(p);
+    mapaAnterior.set(clave, mapaAnterior.has(clave) ? null : p);
+  }
 
   const cambios: CambioLinea[] = [];
   const proyectosNuevos: string[] = [];
 
   for (const actual of proyectosActuales) {
-    const anterior = mapaAnterior.get(actual.filaExcel);
+    const anterior = mapaAnterior.get(claveProyecto(actual));
     if (!anterior) {
       proyectosNuevos.push(actual.detalle ? `${actual.proyecto} — ${actual.detalle}` : actual.proyecto);
       continue;
