@@ -159,6 +159,22 @@ export default function CompararCierre() {
     }
   }
 
+  const totalesResumen = useMemo(() => {
+    const grupos = resultado?.resumenPorGrupo ?? [];
+    return grupos.reduce(
+      (acc, g) => ({
+        presupuestoAprobadoAntes: acc.presupuestoAprobadoAntes + g.presupuestoAprobadoAntes,
+        presupuestoAprobadoAhora: acc.presupuestoAprobadoAhora + g.presupuestoAprobadoAhora,
+        forecastAntes: acc.forecastAntes + g.forecastAntes,
+        forecastAhora: acc.forecastAhora + g.forecastAhora,
+        diferenciaAntes: acc.diferenciaAntes + g.diferenciaAntes,
+        diferenciaAhora: acc.diferenciaAhora + g.diferenciaAhora,
+        cambio: acc.cambio + g.cambio,
+      }),
+      { presupuestoAprobadoAntes: 0, presupuestoAprobadoAhora: 0, forecastAntes: 0, forecastAhora: 0, diferenciaAntes: 0, diferenciaAhora: 0, cambio: 0 }
+    );
+  }, [resultado]);
+
   const gruposDisponibles = useMemo(
     () => Array.from(new Set((resultado?.cambios ?? []).map((c) => c.grupoNegocio || "SIN GRUPO"))).sort((a, b) => a.localeCompare(b, "es")),
     [resultado]
@@ -385,6 +401,48 @@ export default function CompararCierre() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: "2px solid var(--borde)" }}>
+                    <td className="py-1.5 px-3 font-bold" style={{ background: "var(--bg)" }}>
+                      Total
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-bold whitespace-nowrap" style={{ background: "var(--bg)", borderLeft: "1px solid var(--borde)" }}>
+                      {moneda2(totalesResumen.presupuestoAprobadoAntes)}
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-bold whitespace-nowrap" style={{ background: "var(--bg)" }}>
+                      {moneda2(totalesResumen.presupuestoAprobadoAhora)}
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-bold whitespace-nowrap" style={{ background: "var(--bg)", borderLeft: "1px solid var(--borde)" }}>
+                      {moneda2(totalesResumen.forecastAntes)}
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-bold whitespace-nowrap" style={{ background: "var(--bg)" }}>
+                      {moneda2(totalesResumen.forecastAhora)}
+                    </td>
+                    <td
+                      className="py-1.5 px-3 text-center font-bold whitespace-nowrap"
+                      style={{
+                        background: "var(--bg)",
+                        borderLeft: "1px solid var(--borde)",
+                        color: totalesResumen.diferenciaAntes < 0 ? "var(--peligro)" : undefined,
+                      }}
+                    >
+                      {moneda2(totalesResumen.diferenciaAntes)}
+                    </td>
+                    <td
+                      className="py-1.5 px-3 text-center font-bold whitespace-nowrap"
+                      style={{ background: "var(--bg)", color: totalesResumen.diferenciaAhora < 0 ? "var(--peligro)" : undefined }}
+                    >
+                      {moneda2(totalesResumen.diferenciaAhora)}
+                    </td>
+                    <td
+                      className="py-1.5 px-3 text-center font-bold whitespace-nowrap"
+                      style={{ background: "var(--bg)", color: totalesResumen.cambio >= 0 ? "var(--exito)" : "var(--peligro)" }}
+                    >
+                      {totalesResumen.cambio > 0 ? "+" : ""}
+                      {moneda2(totalesResumen.cambio)} {totalesResumen.cambio >= 0 ? "▲ ahorro" : "▼ gasto aumentado"}
+                    </td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
