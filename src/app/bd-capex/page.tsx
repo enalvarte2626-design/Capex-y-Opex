@@ -37,6 +37,7 @@ type Columna =
   | "subNegocio"
   | "grupoNegocio"
   | "prioridad"
+  | "status"
   | "avancePct"
   | "presupuestoAprobado"
   | "gastoReal"
@@ -48,7 +49,7 @@ function soles(valorUsd: number, tipoCambio: number): string {
 }
 
 const ANCHO_SUBCOL_MES = 90;
-const CANTIDAD_COLUMNAS_TEXTO = 7; // # + proyecto..avance, antes de los 4 importes destacados
+const CANTIDAD_COLUMNAS_TEXTO = 8; // # + proyecto..avance, antes de los 4 importes destacados
 const ANCHO_NUMERO = 44;
 const COLOR_RESALTADO = "#fff3b0"; // amarillo, alto contraste para exponer en pantalla
 
@@ -58,6 +59,7 @@ const COLUMNAS_BASE: { clave: Columna; etiqueta: string; numerica?: boolean; des
   { clave: "subNegocio", etiqueta: "Sub. Negocio", ancho: 100 },
   { clave: "grupoNegocio", etiqueta: "Grupo", ancho: 90 },
   { clave: "prioridad", etiqueta: "Prioridad", ancho: 95 },
+  { clave: "status", etiqueta: "Status", ancho: 110 },
   { clave: "avancePct", etiqueta: "Avance", ancho: 150 },
   { clave: "presupuestoAprobado", etiqueta: "Presupuesto aprobado", numerica: true, destacada: true, ancho: 115 },
   { clave: "gastoReal", etiqueta: "Gasto real", numerica: true, destacada: true, ancho: 100 },
@@ -778,6 +780,16 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
                         tipo="texto"
                         valor={p.prioridad}
                         onGuardado={(v) => actualizarLocal(p.filaExcel, { prioridad: String(v) })}
+                      />
+                    </td>
+                    <td className="py-1.5 px-3 truncate" title={p.status}>
+                      <CampoEditable
+                        fila={p.filaExcel}
+                        campo="status"
+                        tipo="texto"
+                        valor={p.status}
+                        placeholder="—"
+                        onGuardado={(v) => actualizarLocal(p.filaExcel, { status: String(v) })}
                       />
                     </td>
                     <td className="py-1.5 px-3 overflow-hidden">
