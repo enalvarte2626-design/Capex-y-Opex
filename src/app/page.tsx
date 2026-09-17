@@ -505,6 +505,7 @@ export default function DashboardCapex() {
         tipoCambio={tipoCambio}
       />
       <ProyectosSobrepasadosSection proyectos={filtradosParaGasto} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
+      <ForecastPorGrupoSection proyectos={filtradosParaGasto} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
       <ProyectosCorridosSection
         proyeccionBase={proyeccionBase}
         proyectosCrudos={proyectosCrudos}
@@ -1033,6 +1034,145 @@ function ProyectosSobrepasadosSection({
                 </tr>
               </tfoot>
             </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Cuánta plata falta por gastar (Forecast) por cada proyecto, agrupado por Grupo de
+ * Negocio — para responder "cuánto voy a necesitar todavía" sin tener que ir a Detalle
+ * BD_CAPEX a sumarlo a mano. Solo entran proyectos con Forecast > 0 (uno en $0 no
+ * necesita más plata, no aporta nada a esta vista).
+ */
+function ForecastPorGrupoSection({
+  proyectos,
+  mostrarSoles,
+  tipoCambio,
+}: {
+  proyectos: ProyectoResuelto[];
+  mostrarSoles: boolean;
+  tipoCambio: number;
+}) {
+  const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null);
+
+  const grupos = Array.from(new Set(proyectos.map((p) => p.grupoNegocio))).sort((a, b) => a.localeCompare(b, "es"));
+  const porGrupo = grupos.map((grupo) => {
+    const items = proyectos
+      .filter((p) => p.grupoNegocio === grupo && p.forecast > 0.005)
+      .sort((a, b) => b.forecast - a.forecast); // el que más plata necesita todavía, primero
+    const totalForecast = items.reduce((a, p) => a + p.forecast, 0);
+    return { grupo, items, totalForecast };
+  });
+
+  const grupoModal = porGrupo.find((g) => g.grupo === grupoAbierto);
+
+  return (
+    <div className="card p-4">
+      <h2 className="font-semibold mb-4">Forecast por proyecto, por grupo de negocio</h2>
+      <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
+        Cuánta plata falta por gastar (proyectado en los meses que quedan) en cada proyecto — para saber cuánto se
+        va a necesitar todavía por grupo de negocio.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {porGrupo.map((g) => {
+          const color = COLOR_GRUPO[g.grupo] ?? "var(--texto)";
+          return (
+            <button
+              key={g.grupo}
+              type="button"
+              onClick={() => setGrupoAbierto(g.grupo)}
+              disabled={g.items.length === 0}
+              className="rounded-lg p-3 text-left"
+              style={{
+                background: "var(--acento-suave)",
+                cursor: g.items.length === 0 ? "default" : "pointer",
+                opacity: g.items.length === 0 ? 0.5 : 1,
+              }}
+              title={g.items.length > 0 ? "Toca para ver el detalle" : undefined}
+            >
+              <p className="text-2xl font-bold" style={{ color: "var(--acento-fuerte)" }}>
+                {moneda2(g.totalForecast)}
+              </p>
+              <MontoSoles valorUsd={g.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs" />
+              <p className="text-sm font-semibold" style={{ color }}>
+                {g.grupo} · {g.items.length} proyecto(s)
+              </p>
+            </button>
+          );
+        })}
+      </div>
+
+      {grupoModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center p-6"
+          style={{ background: "rgba(0,0,0,0.4)", zIndex: 50 }}
+          onClick={() => setGrupoAbierto(null)}
+        >
+          <div
+            className="card p-4 w-full flex flex-col"
+            style={{ maxWidth: 900, maxHeight: "85vh", background: "var(--card)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3 shrink-0">
+              <h2 className="font-semibold">
+                {grupoModal.grupo} — Forecast por proyecto ({grupoModal.items.length})
+              </h2>
+              <button
+                className="text-xl leading-none px-2"
+                style={{ color: "var(--texto-suave)" }}
+                onClick={() => setGrupoAbierto(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div style={{ overflow: "auto" }}>
+              <table className="w-full text-sm border-collapse">
+                <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
+                  <tr className="text-left" style={{ color: "var(--texto-suave)", background: "var(--card)" }}>
+                    <th className="py-2 pr-4 font-semibold">Proyecto</th>
+                    <th className="py-2 pr-4 font-semibold">Detalle</th>
+                    <th className="py-2 pr-4 font-semibold">Status</th>
+                    <th className="py-2 px-3 text-right font-semibold">Forecast</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grupoModal.items.map((p) => (
+                    <tr key={p.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
+                      <td className="py-1.5 pr-4 font-semibold">{p.proyecto}</td>
+                      <td
+                        className="py-1.5 pr-4"
+                        style={{ color: "var(--texto-suave)", maxWidth: 240 }}
+                        title={p.detalle}
+                      >
+                        {p.detalle || "—"}
+                      </td>
+                      <td className="py-1.5 pr-4" style={{ color: "var(--texto-suave)" }} title={p.status}>
+                        {p.status.trim() || "—"}
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-bold" style={{ color: "var(--acento-fuerte)" }}>
+                        {moneda2(p.forecast)}
+                        <MontoSoles valorUsd={p.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot style={{ position: "sticky", bottom: 0, zIndex: 1 }}>
+                  <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
+                    <td className="py-2 pr-4 font-bold" colSpan={3}>
+                      Total
+                    </td>
+                    <td className="py-2 px-3 text-right font-bold" style={{ color: "var(--acento-fuerte)" }}>
+                      {moneda2(grupoModal.totalForecast)}
+                      <MontoSoles valorUsd={grupoModal.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         </div>
