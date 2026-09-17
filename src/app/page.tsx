@@ -505,7 +505,7 @@ export default function DashboardCapex() {
         tipoCambio={tipoCambio}
       />
       <ProyectosSobrepasadosSection proyectos={filtradosParaGasto} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
-      <ForecastPorGrupoSection proyectos={filtradosParaGasto} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
+      <ForecastPorGrupoSection proyectos={filtradosParaGasto} mesCierre={mesCierre} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
       <ProyectosCorridosSection
         proyeccionBase={proyeccionBase}
         proyectosCrudos={proyectosCrudos}
@@ -1048,12 +1048,35 @@ function ProyectosSobrepasadosSection({
  * BD_CAPEX a sumarlo a mano. Solo entran proyectos con Forecast > 0 (uno en $0 no
  * necesita más plata, no aporta nada a esta vista).
  */
+/** T1 = Ene-Mar, T2 = Abr-Jun, T3 = Jul-Sep, T4 = Oct-Dic. */
+function trimestreDeMes(indiceMes: number): number {
+  return Math.floor(indiceMes / 3) + 1;
+}
+
+/** De los meses que todavía son Forecast (desde `mesCierre` en adelante), cuáles
+ *  concretamente tienen algo proyectado (>0) — y en qué trimestre(s) caen. Un proyecto
+ *  puede repartir su Forecast en varios meses/trimestres a la vez. */
+function mesesConForecast(p: { proyectado: number[] }, mesCierre: number): { meses: string; trimestres: string } {
+  const indices: number[] = [];
+  for (let m = mesCierre; m < 12; m++) {
+    if (p.proyectado[m] > 0.005) indices.push(m);
+  }
+  const meses = indices.map((m) => NOMBRES_MES[m]).join(", ");
+  const trimestres = Array.from(new Set(indices.map(trimestreDeMes)))
+    .sort((a, b) => a - b)
+    .map((t) => `T${t}`)
+    .join(", ");
+  return { meses: meses || "—", trimestres: trimestres || "—" };
+}
+
 function ForecastPorGrupoSection({
   proyectos,
+  mesCierre,
   mostrarSoles,
   tipoCambio,
 }: {
   proyectos: ProyectoResuelto[];
+  mesCierre: number;
   mostrarSoles: boolean;
   tipoCambio: number;
 }) {
@@ -1137,33 +1160,42 @@ function ForecastPorGrupoSection({
                     <th className="py-2 pr-4 font-semibold">Proyecto</th>
                     <th className="py-2 pr-4 font-semibold">Detalle</th>
                     <th className="py-2 pr-4 font-semibold">Status</th>
+                    <th className="py-2 pr-4 font-semibold">Trimestre(s)</th>
+                    <th className="py-2 pr-4 font-semibold">Meses</th>
                     <th className="py-2 px-3 text-right font-semibold">Forecast</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {grupoModal.items.map((p) => (
-                    <tr key={p.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
-                      <td className="py-1.5 pr-4 font-semibold">{p.proyecto}</td>
-                      <td
-                        className="py-1.5 pr-4"
-                        style={{ color: "var(--texto-suave)", maxWidth: 240 }}
-                        title={p.detalle}
-                      >
-                        {p.detalle || "—"}
-                      </td>
-                      <td className="py-1.5 pr-4" style={{ color: "var(--texto-suave)" }} title={p.status}>
-                        {p.status.trim() || "—"}
-                      </td>
-                      <td className="py-1.5 px-3 text-right font-bold" style={{ color: "var(--acento-fuerte)" }}>
-                        {moneda2(p.forecast)}
-                        <MontoSoles valorUsd={p.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
-                      </td>
-                    </tr>
-                  ))}
+                  {grupoModal.items.map((p) => {
+                    const { meses, trimestres } = mesesConForecast(p, mesCierre);
+                    return (
+                      <tr key={p.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
+                        <td className="py-1.5 pr-4 font-semibold">{p.proyecto}</td>
+                        <td
+                          className="py-1.5 pr-4"
+                          style={{ color: "var(--texto-suave)", maxWidth: 240 }}
+                          title={p.detalle}
+                        >
+                          {p.detalle || "—"}
+                        </td>
+                        <td className="py-1.5 pr-4" style={{ color: "var(--texto-suave)" }} title={p.status}>
+                          {p.status.trim() || "—"}
+                        </td>
+                        <td className="py-1.5 pr-4 whitespace-nowrap">{trimestres}</td>
+                        <td className="py-1.5 pr-4 whitespace-nowrap" style={{ color: "var(--texto-suave)" }}>
+                          {meses}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-bold" style={{ color: "var(--acento-fuerte)" }}>
+                          {moneda2(p.forecast)}
+                          <MontoSoles valorUsd={p.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot style={{ position: "sticky", bottom: 0, zIndex: 1 }}>
                   <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
-                    <td className="py-2 pr-4 font-bold" colSpan={3}>
+                    <td className="py-2 pr-4 font-bold" colSpan={5}>
                       Total
                     </td>
                     <td className="py-2 px-3 text-right font-bold" style={{ color: "var(--acento-fuerte)" }}>
