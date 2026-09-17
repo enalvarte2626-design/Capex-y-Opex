@@ -109,12 +109,25 @@ export interface ResumenGrupo {
   cambio: number;
 }
 
+export interface ProyectoNuevo {
+  proyecto: string;
+  detalle: string;
+  grupoNegocio: string;
+  presupuestoAprobado: number;
+  forecast: number;
+}
+
 export interface ResultadoComparacion {
   nombreArchivoAnterior: string;
   fechaVersionAnterior: string | null;
   cerradosEnReferencia: number;
   cerradosActual: number;
-  proyectosNuevos: string[];
+  /** Proyectos que hoy existen pero no estaban todavía en el punto de referencia — no
+   *  hay "antes" con qué compararlos, así que no generan ninguna fila en `cambios`, pero
+   *  sí están contados en los totales de `resumenPorGrupo` (su grupo, con estos mismos
+   *  valores). Se listan con su Presupuesto Aprobado y Forecast actuales para poder
+   *  revisar qué se les cargó, ya que no aparecen en ningún otro lado de esta pantalla. */
+  proyectosNuevos: ProyectoNuevo[];
   cambios: CambioLinea[];
   /** Por Grupo de Negocio, ordenado del cambio más grande (en valor absoluto) al más
    *  chico — para ver de un vistazo qué grupo es el que más movió el indicador general. */
@@ -197,24 +210,49 @@ export async function compararConReferencia(
   const proyectosActuales = filtrarPrioridad(extraerProyectos(leerWorkbook(contenidoActual), hoja));
   const proyectosAnteriores = filtrarPrioridad(extraerProyectos(leerWorkbook(contenidoAnterior), hoja));
 
-  // Mapa por Proyecto+Detalle (no por número de fila — ver el comentario de
-  // claveProyecto). Si dos proyectos de "antes" comparten la misma clave (nombre y
-  // detalle idénticos, algo raro pero posible), se marca como ambigua (null) para NO
-  // arriesgarse a cruzar dos proyectos distintos por error — esa línea simplemente no
-  // se compara, en vez de comparar mal.
+  // Mapa por Proyecto+Detalle — ver el comentario de claveProyecto sobre por qué NO se
+  // usa el número de fila como primer criterio. Si dos proyectos de "antes" comparten la
+  // misma clave (nombre y detalle idénticos, algo raro pero posible), se marca como
+  // ambigua (null) para NO arriesgarse a cruzar dos proyectos distintos por error.
   const mapaAnterior = new Map<string, (typeof proyectosAnteriores)[number] | null>();
   for (const p of proyectosAnteriores) {
     const clave = claveProyecto(p);
     mapaAnterior.set(clave, mapaAnterior.has(clave) ? null : p);
   }
+  // Respaldo por número de fila — para cuando el proyecto SÍ es el mismo pero se le
+  // corrigió el nombre o el detalle entre un cierre y el siguiente (un cambio de texto
+  // legítimo no debería hacer que un proyecto que "siempre existió" salga marcado como
+  // nuevo). Solo se usa si el emparejamiento por texto no encontró nada, y solo una vez
+  // por fila (`filasAnterioresUsadas` evita que la misma fila de "antes" quede
+  // reclamada dos veces si además hubo una reordenada real de por medio).
+  const mapaAnteriorPorFila = new Map(proyectosAnteriores.map((p) => [p.filaExcel, p]));
+  const filasAnterioresUsadas = new Set<number>();
+  for (const p of proyectosActuales) {
+    const porTexto = mapaAnterior.get(claveProyecto(p));
+    if (porTexto) filasAnterioresUsadas.add(porTexto.filaExcel);
+  }
 
   const cambios: CambioLinea[] = [];
-  const proyectosNuevos: string[] = [];
+  const proyectosNuevos: ProyectoNuevo[] = [];
 
   for (const actual of proyectosActuales) {
-    const anterior = mapaAnterior.get(claveProyecto(actual));
+    let anterior = mapaAnterior.get(claveProyecto(actual));
     if (!anterior) {
-      proyectosNuevos.push(actual.detalle ? `${actual.proyecto} — ${actual.detalle}` : actual.proyecto);
+      const porFila = mapaAnteriorPorFila.get(actual.filaExcel);
+      if (porFila && !filasAnterioresUsadas.has(porFila.filaExcel)) {
+        anterior = porFila;
+        filasAnterioresUsadas.add(porFila.filaExcel);
+      }
+    }
+    if (!anterior) {
+      const t = totalesProyecto(actual, cerradosActual);
+      proyectosNuevos.push({
+        proyecto: actual.proyecto,
+        detalle: actual.detalle,
+        grupoNegocio: actual.grupoNegocio,
+        presupuestoAprobado: t.presupuestoAprobado,
+        forecast: t.forecast,
+      });
       continue;
     }
 

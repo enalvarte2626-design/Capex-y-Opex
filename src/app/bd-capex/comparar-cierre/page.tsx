@@ -41,12 +41,20 @@ interface ResumenGrupo {
   cambio: number;
 }
 
+interface ProyectoNuevo {
+  proyecto: string;
+  detalle: string;
+  grupoNegocio: string;
+  presupuestoAprobado: number;
+  forecast: number;
+}
+
 interface ResultadoComparacion {
   nombreArchivoAnterior: string;
   fechaVersionAnterior: string | null;
   cerradosEnReferencia: number;
   cerradosActual: number;
-  proyectosNuevos: string[];
+  proyectosNuevos: ProyectoNuevo[];
   cambios: CambioLinea[];
   resumenPorGrupo: ResumenGrupo[];
   totalAntes: number;
@@ -384,10 +392,40 @@ export default function CompararCierre() {
           {resultado.proyectosNuevos.length > 0 && (
             <div className="card p-4 text-sm">
               <p className="font-semibold mb-1">{resultado.proyectosNuevos.length} proyecto(s) nuevo(s) desde entonces</p>
-              <p style={{ color: "var(--texto-suave)" }}>
-                No existían todavía en ese punto de referencia, así que no hay con qué compararlos:{" "}
-                {resultado.proyectosNuevos.join(", ")}.
+              <p className="mb-3" style={{ color: "var(--texto-suave)" }}>
+                No existían todavía en ese punto de referencia, así que no aparecen como "cambio" (no hay un
+                "antes" con qué compararlos) — pero sí están contados en el total "Ahora" de su grupo, arriba.
+                Acá su Presupuesto Aprobado y Forecast actuales, para revisar qué se les cargó:
               </p>
+              <div className="overflow-x-auto">
+                <table className="text-xs border-collapse w-full">
+                  <thead>
+                    <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
+                      <th className="py-1.5 px-3 font-semibold">Proyecto</th>
+                      <th className="py-1.5 px-3 font-semibold">Grupo</th>
+                      <th className="py-1.5 px-3 font-semibold text-center">Presupuesto Aprobado</th>
+                      <th className="py-1.5 px-3 font-semibold text-center">Forecast</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resultado.proyectosNuevos.map((p, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid var(--borde)" }}>
+                        <td className="py-1.5 px-3">
+                          <span className="font-semibold">{p.proyecto || "—"}</span>
+                          {p.detalle && (
+                            <span className="block" style={{ color: "var(--texto-suave)" }}>
+                              {p.detalle}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3">{p.grupoNegocio}</td>
+                        <td className="py-1.5 px-3 text-center whitespace-nowrap">{moneda2(p.presupuestoAprobado)}</td>
+                        <td className="py-1.5 px-3 text-center whitespace-nowrap">{moneda2(p.forecast)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
