@@ -945,6 +945,7 @@ function ProyectosSobrepasadosSection({
                 <tr className="text-left" style={{ color: "var(--texto-suave)", background: "var(--card)" }}>
                   <th className="py-2 pr-4 font-semibold">Proyecto</th>
                   <th className="py-2 pr-4 font-semibold">Detalle</th>
+                  <th className="py-2 pr-4 font-semibold">Status</th>
                   <th className="py-2 px-3 text-right font-semibold">Presupuesto Aprobado</th>
                   <th className="py-2 px-3 text-right font-semibold">Gasto Real</th>
                   <th className="py-2 px-3 text-right font-semibold">Forecast</th>
@@ -965,6 +966,9 @@ function ProyectosSobrepasadosSection({
                         title={p.detalle}
                       >
                         {p.detalle || "—"}
+                      </td>
+                      <td className="py-1.5 pr-4" style={{ color: "var(--texto-suave)" }} title={p.status}>
+                        {p.status.trim() || "—"}
                       </td>
                       <td className="py-1.5 px-3 text-right">
                         {moneda2(p.presupuestoAprobado)}
@@ -989,9 +993,9 @@ function ProyectosSobrepasadosSection({
                   );
                 })}
               </tbody>
-              <tfoot>
+              <tfoot style={{ position: "sticky", bottom: 0, zIndex: 1 }}>
                 <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
-                  <td className="py-2 pr-4 font-bold" colSpan={2}>
+                  <td className="py-2 pr-4 font-bold" colSpan={3}>
                     Total
                   </td>
                   <td className="py-2 px-3 text-right font-bold">
