@@ -337,9 +337,18 @@ export async function listarVersionesArchivo(
   driveId: string,
   itemId: string
 ): Promise<VersionArchivo[]> {
-  const res = await graphFetch(config, `/drives/${driveId}/items/${itemId}/versions?$select=id,lastModifiedDateTime`);
-  const datos = await res.json();
-  const versiones: Array<{ id: string; lastModifiedDateTime: string }> = datos.value ?? [];
+  // Un archivo con muchos guardados (ej. AutoSave de Excel Online activo durante horas de
+  // edición) puede acumular cientos de versiones, y Graph pagina esa lista — si nos
+  // quedamos solo con la primera página, las versiones MÁS ANTIGUAS (que van al final)
+  // se pierden en silencio. Por eso se sigue @odata.nextLink hasta agotar todas las páginas.
+  const versiones: Array<{ id: string; lastModifiedDateTime: string }> = [];
+  let url: string | undefined = `/drives/${driveId}/items/${itemId}/versions?$select=id,lastModifiedDateTime`;
+  while (url) {
+    const res = await graphFetch(config, url);
+    const datos = await res.json();
+    versiones.push(...((datos.value ?? []) as Array<{ id: string; lastModifiedDateTime: string }>));
+    url = datos["@odata.nextLink"];
+  }
   return versiones
     .map((v) => ({ id: v.id, fecha: v.lastModifiedDateTime }))
     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
