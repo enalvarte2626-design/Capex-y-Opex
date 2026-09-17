@@ -44,6 +44,7 @@ function categorias(anioCapex: string, anioOpex: string): Categoria[] {
       enlaces: [
         { href: "/opex", etiqueta: "Dashboard" },
         { href: "/opex/presupuesto", etiqueta: "Presupuesto" },
+        { href: "/opex/comparar-cierre", etiqueta: "Comparar cierre" },
         { href: "/opex/planificacion", etiqueta: `Planificación ${Number(anioOpex) + 1}` },
         { href: "/opex/facturas", etiqueta: "Facturas" },
       ],

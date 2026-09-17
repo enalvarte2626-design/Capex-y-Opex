@@ -306,6 +306,21 @@ export async function crearArchivo(
   };
 }
 
+/** Renombra un archivo en el lugar (mismo itemId, mismo historial de versiones — solo
+ *  cambia el nombre visible). Falla si ya existe otro archivo con ese nombre en la carpeta. */
+export async function renombrarArchivo(
+  config: ConfiguracionSharePoint,
+  driveId: string,
+  itemId: string,
+  nuevoNombre: string
+): Promise<void> {
+  await graphFetch(config, `/drives/${driveId}/items/${itemId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: nuevoNombre }),
+  });
+}
+
 /** Descarga el contenido binario del archivo ya resuelto. */
 export async function descargarContenido(
   config: ConfiguracionSharePoint,

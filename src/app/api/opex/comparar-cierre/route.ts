@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ErrorSharePoint, camposFaltantes, obtenerConfiguracionSharePoint, resolverArchivoPorShareUrl } from "@/lib/sharepoint";
+import { ErrorSharePoint, camposFaltantesOpex, obtenerConfiguracionOpex, resolverArchivoPorShareUrl } from "@/lib/sharepoint";
 import { compararConReferencia } from "@/lib/compararCierre";
-import { extraerProyectos } from "@/lib/capex-parse";
+import { extraerPresupuestoOpex } from "@/lib/opex-parse";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Compara BD_CAPEX en vivo contra un punto de referencia: ?itemId=... (archivo, obligatorio),
- * &nombre=... (para mostrar), &versionId=... (opcional — si no viene, usa el contenido
- * MÁS RECIENTE de ese archivo), &fechaVersion=... (opcional, solo para mostrar) y
- * &cerrados=N (cuántos meses estaban cerrados en ese punto de referencia),
- * &cerradosActual=N (cuántos meses están cerrados HOY, para el resumen por grupo) y
- * &prioridades=1,2 (opcional — si viene, solo compara esas Prioridades).
+ * Igual que /api/capex/comparar-cierre, pero para el Presupuesto OPEX: ?itemId=...
+ * (archivo, obligatorio), &nombre=... (para mostrar), &versionId=... (opcional — si no
+ * viene, usa el contenido MÁS RECIENTE de ese archivo), &fechaVersion=... (opcional,
+ * solo para mostrar), &cerrados=N (meses cerrados en ese punto de referencia) y
+ * &cerradosActual=N (meses cerrados HOY, para el resumen por grupo).
  */
 export async function GET(req: NextRequest) {
-  const config = obtenerConfiguracionSharePoint();
-  const faltantes = camposFaltantes(config);
+  const config = obtenerConfiguracionOpex();
+  const faltantes = camposFaltantesOpex(config);
   if (faltantes.length > 0) {
     return NextResponse.json({ error: `Falta configurar en .env.local: ${faltantes.join(", ")}.` }, { status: 500 });
   }
@@ -26,8 +25,6 @@ export async function GET(req: NextRequest) {
   const fechaVersion = req.nextUrl.searchParams.get("fechaVersion")?.trim() || undefined;
   const cerrados = Number(req.nextUrl.searchParams.get("cerrados") ?? "0");
   const cerradosActual = Number(req.nextUrl.searchParams.get("cerradosActual") ?? "0");
-  const prioridadesTexto = req.nextUrl.searchParams.get("prioridades")?.trim();
-  const prioridades = prioridadesTexto ? prioridadesTexto.split(",").map((p) => p.trim()).filter(Boolean) : undefined;
 
   if (!itemId || !nombre) {
     return NextResponse.json({ error: "Falta indicar contra qué archivo comparar." }, { status: 400 });
@@ -41,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
-    const hoja = process.env.SP_CAPEX_HOJA?.trim() || "BD_CAPEX";
+    const hoja = process.env.SP_OPEX_HOJA_PRESUPUESTO?.trim() || "Presupuesto 2026";
     const resultado = await compararConReferencia(
       config,
       archivo,
@@ -49,8 +46,8 @@ export async function GET(req: NextRequest) {
       { driveId: archivo.driveId, itemId, nombre, versionId, fechaVersion },
       cerrados,
       cerradosActual,
-      prioridades,
-      extraerProyectos
+      undefined,
+      extraerPresupuestoOpex
     );
     return NextResponse.json(resultado);
   } catch (e) {

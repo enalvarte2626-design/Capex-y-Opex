@@ -124,7 +124,7 @@ export default function PresupuestoOpex() {
     const mesNuevo = mesCierreServidor + 1;
     const nombreMesNuevo = NOMBRES_MES_CIERRE[mesNuevo - 1];
     const confirmado = window.confirm(
-      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto ${anio} al registrarla — hasta ahora quedaba solo en el historial.`
+      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto ${anio} al registrarla — hasta ahora quedaba solo en el historial. El archivo se va a renombrar para reflejar el nuevo cierre.`
     );
     if (!confirmado) return;
 
@@ -140,7 +140,10 @@ export default function PresupuestoOpex() {
       if (!res.ok) throw new Error(json.error || "No se pudo cerrar el mes.");
       setMesCierreServidor(json.mesCierre);
       setMesCierre(json.mesCierre);
-      setMensajeCierre({ tipo: "ok", texto: `${json.nombreMesCierre} cerrado.` });
+      setMensajeCierre({
+        tipo: "ok",
+        texto: `${json.nombreMesCierre} cerrado.${json.archivo ? ` Archivo renombrado a "${json.archivo}".` : ""}`,
+      });
     } catch (e) {
       setMensajeCierre({ tipo: "error", texto: (e as Error).message });
     } finally {

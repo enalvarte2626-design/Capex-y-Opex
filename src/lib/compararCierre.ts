@@ -6,7 +6,9 @@ import {
   listarVersionesArchivo,
   type VersionArchivo,
 } from "./sharepoint";
-import { leerWorkbook, extraerProyectos } from "./capex-parse";
+import { leerWorkbook } from "./capex-parse";
+import type * as XLSX from "xlsx";
+import type { ProyectoCapex } from "./capex";
 
 const NOMBRES_MES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -194,7 +196,12 @@ export async function compararConReferencia(
   /** Si viene, solo se comparan los proyectos cuya Prioridad (tal cual el texto en
    *  Excel, ej. "1", "2") esté en esta lista — el resto queda completamente afuera de
    *  cambios, proyectosNuevos y el resumen por grupo, no solo escondido en la pantalla. */
-  prioridades?: string[]
+  prioridades: string[] | undefined,
+  /** Lee las líneas de la hoja como `ProyectoCapex[]` — `extraerProyectos` para CAPEX
+   *  (BD_CAPEX), `extraerPresupuestoOpex` para OPEX (Presupuesto). Cada app tiene su
+   *  propio layout de columnas, pero ambas devuelven la misma forma de datos, así que el
+   *  resto de esta comparación (matching, totales, resumen por grupo) es igual para las dos. */
+  extraerLineas: (wb: XLSX.WorkBook, nombreHoja: string) => ProyectoCapex[]
 ): Promise<ResultadoComparacion> {
   const [contenidoActual, contenidoAnterior] = await Promise.all([
     descargarContenido(config, archivoActual),
@@ -207,8 +214,8 @@ export async function compararConReferencia(
   const filtrarPrioridad = <T extends { prioridad: string }>(lista: T[]): T[] =>
     filtroPrioridad ? lista.filter((p) => filtroPrioridad.has(p.prioridad.trim())) : lista;
 
-  const proyectosActuales = filtrarPrioridad(extraerProyectos(leerWorkbook(contenidoActual), hoja));
-  const proyectosAnteriores = filtrarPrioridad(extraerProyectos(leerWorkbook(contenidoAnterior), hoja));
+  const proyectosActuales = filtrarPrioridad(extraerLineas(leerWorkbook(contenidoActual), hoja));
+  const proyectosAnteriores = filtrarPrioridad(extraerLineas(leerWorkbook(contenidoAnterior), hoja));
 
   // Mapa por Proyecto+Detalle — ver el comentario de claveProyecto sobre por qué NO se
   // usa el número de fila como primer criterio. Si dos proyectos de "antes" comparten la

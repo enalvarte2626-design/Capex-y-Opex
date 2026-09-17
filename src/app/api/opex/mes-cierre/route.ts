@@ -3,12 +3,32 @@ import {
   ErrorSharePoint,
   camposFaltantesOpex,
   obtenerConfiguracionOpex,
+  renombrarArchivo,
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
 import { leerMesCierre, escribirMesCierre } from "@/lib/mesCierreConfig";
 import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 
 export const dynamic = "force-dynamic";
+
+/** "Presupuesto 2026.xlsx" + cerrados=8 → "Presupuesto 2026 8+4.xlsx" — igual patrón
+ *  "N+M" que ya usa CAPEX para sus archivos de cierre (N meses cerrados, M restantes en
+ *  el año), pero acá se RENOMBRA el mismo archivo en vivo en vez de crear uno nuevo al
+ *  lado: no hay copia aparte, así que el historial de un punto anterior (ej. cuando
+ *  todavía se llamaba "7+5") queda en las VERSIONES de SharePoint de este mismo archivo,
+ *  no en un archivo distinto — por eso Comparar cierre de OPEX solo compara contra
+ *  versiones, nunca contra "otro archivo" de la carpeta. */
+function construirNombreCierre(nombreActual: string, cerrados: number): string {
+  const restantes = 12 - cerrados;
+  const patronNM = /\d+\s*\+\s*\d+/;
+  if (patronNM.test(nombreActual)) {
+    return nombreActual.replace(patronNM, `${cerrados}+${restantes}`);
+  }
+  const punto = nombreActual.lastIndexOf(".");
+  const base = punto === -1 ? nombreActual : nombreActual.slice(0, punto);
+  const extension = punto === -1 ? "" : nombreActual.slice(punto);
+  return `${base} ${cerrados}+${restantes}${extension}`;
+}
 
 export async function GET() {
   const config = obtenerConfiguracionOpex();
@@ -64,11 +84,16 @@ export async function POST(request: Request) {
       );
     }
 
+    const nuevoNombre = construirNombreCierre(archivo.nombre, mesNuevo);
+    if (nuevoNombre.toLowerCase() !== archivo.nombre.toLowerCase()) {
+      await renombrarArchivo(config, archivo.driveId, archivo.itemId, nuevoNombre);
+    }
     await escribirMesCierre(config, archivo, mesNuevo);
     return NextResponse.json({
       ok: true,
       mesCierre: mesNuevo,
       nombreMesCierre: NOMBRES_MES_CIERRE[mesNuevo - 1],
+      archivo: nuevoNombre,
     });
   } catch (e) {
     const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
