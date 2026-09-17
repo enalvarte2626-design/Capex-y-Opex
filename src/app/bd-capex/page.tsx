@@ -366,16 +366,6 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
       .map(([valor, cantidad]) => ({ valor, cantidad }));
   }, [resueltos]);
   const prioridades = useMemo(() => prioridadesDisponibles(resueltos), [resueltos]);
-  const statusDisponibles = useMemo(() => {
-    const conteo = new Map<string, number>();
-    for (const p of resueltos) {
-      const clave = p.status.trim() || "Sin status";
-      conteo.set(clave, (conteo.get(clave) ?? 0) + 1);
-    }
-    return Array.from(conteo.entries())
-      .sort((a, b) => a[0].localeCompare(b[0], "es"))
-      .map(([valor, cantidad]) => ({ valor, cantidad }));
-  }, [resueltos]);
   const avances = useMemo(() => {
     const conteo = new Map<string, number>();
     for (const p of resueltos) {
@@ -393,17 +383,29 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
       .map(([nombre, cantidad]) => ({ nombre, cantidad }));
   }, [resueltos]);
 
-  // Antes de aplicar el filtro de Detalle y la búsqueda de texto — así la lista de
-  // Detalle disponible se acota sola según Grupo/Prioridad/Proyecto ya elegidos.
+  // Antes de aplicar los filtros de Status/Detalle y la búsqueda de texto — así esas
+  // listas disponibles se acotan solas según Grupo/Prioridad/Avance/Proyecto ya
+  // elegidos, en vez de mostrar siempre el universo completo (lo mismo que ya hacía
+  // Detalle, extendido ahora también a Status).
   const preFiltrados = useMemo(() => {
     let filas = resueltos;
     if (gruposSel) filas = filas.filter((p) => gruposSel.includes(p.grupoNegocio || "SIN GRUPO"));
     if (prioridadesSel) filas = filas.filter((p) => prioridadesSel.includes(p.prioridad || "Sin prioridad"));
-    if (statusSel) filas = filas.filter((p) => statusSel.includes(p.status.trim() || "Sin status"));
     if (avancesSel) filas = filas.filter((p) => avancesSel.includes(claveAvance(p)));
     if (proyectosSel) filas = filas.filter((p) => proyectosSel.includes(p.proyecto));
     return filas;
-  }, [resueltos, gruposSel, prioridadesSel, statusSel, avancesSel, proyectosSel]);
+  }, [resueltos, gruposSel, prioridadesSel, avancesSel, proyectosSel]);
+
+  const statusDisponibles = useMemo(() => {
+    const conteo = new Map<string, number>();
+    for (const p of preFiltrados) {
+      const clave = p.status.trim() || "Sin status";
+      conteo.set(clave, (conteo.get(clave) ?? 0) + 1);
+    }
+    return Array.from(conteo.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "es"))
+      .map(([valor, cantidad]) => ({ valor, cantidad }));
+  }, [preFiltrados]);
 
   const detallesDisponibles = useMemo(() => {
     const conteo = new Map<string, number>();
@@ -419,6 +421,7 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
 
   const filtrados = useMemo(() => {
     let filas = preFiltrados;
+    if (statusSel) filas = filas.filter((p) => statusSel.includes(p.status.trim() || "Sin status"));
     if (detallesSel) filas = filas.filter((p) => detallesSel.includes(p.detalle));
     const q = normalizar(busqueda);
     if (q) {
@@ -442,7 +445,7 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
       return orden.asc ? cmp : -cmp;
     });
     return copia;
-  }, [preFiltrados, detallesSel, busqueda, orden]);
+  }, [preFiltrados, statusSel, detallesSel, busqueda, orden]);
 
   const totales = useMemo(
     () =>
