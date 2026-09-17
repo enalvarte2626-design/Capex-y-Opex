@@ -216,7 +216,7 @@ export default function DashboardOpex() {
         <div className="flex items-center gap-3">
           {datos && (
             <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
-              Actualizado {new Date(datos.actualizadoEn).toLocaleString("es-PE")}
+              <strong>{datos.archivo}</strong> · actualizado {new Date(datos.actualizadoEn).toLocaleString("es-PE")}
             </span>
           )}
           <button className="boton-primario" onClick={cargar} disabled={cargando}>
