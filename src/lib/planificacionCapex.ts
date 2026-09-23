@@ -9,7 +9,7 @@ import {
   listarHojas,
   renombrarHoja,
 } from "./sharepoint";
-import { leerWorkbook, extraerProyectos, ultimaFilaConDatosEscaneada } from "./capex-parse";
+import { leerWorkbook, extraerProyectos, resolverNombreHoja, ultimaFilaConDatosEscaneada } from "./capex-parse";
 import type { ProyectoCapex } from "./capex";
 import { escribirAnioActivo } from "./anioActivoConfig";
 
@@ -25,6 +25,19 @@ interface DatosFilaCapexBorrador {
   detalle: string;
   prioridad: string;
   presupuestoAprobado: number;
+  /** Solo se completan al IMPORTAR desde un Excel externo (ver `importarBorradorCapex`)
+   *  — al generar el borrador copiando BD_CAPEX en vivo, quedan en su valor por defecto
+   *  (en blanco/$0), a propósito, para no arrastrar datos de seguimiento del año pasado. */
+  categoria?: string;
+  status?: string;
+  opex?: string;
+  recurso?: string;
+  responsable?: string;
+  tiempo?: string;
+  /** Gasto real/proyectado por mes (índice 0 = enero … 11 = diciembre) — en blanco ($0)
+   *  salvo que se importen de un Excel externo. */
+  real?: number[];
+  proyectado?: number[];
 }
 
 /** Escribe una fila de proyecto completa en `hoja`, fila `fila` — mismas columnas/fórmulas
@@ -42,6 +55,14 @@ async function escribirFilaCapex(
   fila: number,
   datos: DatosFilaCapexBorrador
 ): Promise<void> {
+  const real = datos.real ?? Array(12).fill(0);
+  const proyectado = datos.proyectado ?? Array(12).fill(0);
+  const meses: number[] = [];
+  for (let m = 0; m < 12; m++) meses.push(real[m] ?? 0, proyectado[m] ?? 0);
+
+  // El % de Avance (E) SIEMPRE arranca en 0, incluso al importar de un Excel externo —
+  // es un dato de seguimiento propio del año en curso, no algo que tenga sentido
+  // arrastrar de un archivo de planificación.
   await escribirFila(config, archivo, hoja, fila, "A", "E", [
     datos.proyecto,
     datos.subNegocio,
@@ -53,14 +74,14 @@ async function escribirFilaCapex(
     `=IF(E${fila}=0%,"No iniciado",IF(E${fila}<30%,"Inicio",IF(E${fila}<80%,"En proceso",IF(E${fila}<100%,"Por culminar","Culminado"))))`,
   ]);
   await escribirFila(config, archivo, hoja, fila, "G", "AL", [
-    "",
+    datos.categoria ?? "",
     datos.prioridad,
-    "",
-    0,
-    "",
-    "",
-    "",
-    ...Array(24).fill(0),
+    datos.status ?? "",
+    datos.opex ?? "",
+    datos.recurso ?? "",
+    datos.responsable ?? "",
+    datos.tiempo ?? "",
+    ...meses,
     datos.presupuestoAprobado,
   ]);
   await escribirColumna(config, archivo, hoja, "AM", fila, fila, [
@@ -185,4 +206,63 @@ export async function aprobarYActivarCapex(
   await escribirAnioActivo(config, archivo, anioNuevo);
 
   return { anioNuevo, hojaArchivada };
+}
+
+/**
+ * Reemplaza TODO el borrador de planificación por lo que traiga un Excel subido a mano
+ * (mismo layout de columnas que BD_CAPEX en vivo, incluido Real/Proyectado mes a mes) —
+ * a diferencia de `generarBorradorCapex` (que copia los proyectos ya existentes en
+ * blanco) y de `agregarLineaBorradorCapex` (que suma una línea a lo que ya había), esto
+ * BORRA el borrador actual y lo vuelve a llenar solo con lo que trae el archivo.
+ * Busca la hoja `hojaViva` (ej. "BD_CAPEX") dentro del Excel subido; si no la
+ * encuentra con ese nombre, usa la primera hoja del archivo.
+ */
+export async function importarBorradorCapex(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  hojaViva: string,
+  contenidoExcelSubido: Buffer
+): Promise<{ lineas: number; hojaLeida: string }> {
+  const wbSubido = leerWorkbook(contenidoExcelSubido);
+  const nombreResuelto = resolverNombreHoja(wbSubido, hojaViva);
+  const hojaLeida = wbSubido.Sheets[nombreResuelto] ? nombreResuelto : wbSubido.SheetNames[0];
+  if (!hojaLeida) {
+    throw new ErrorSharePoint("El Excel subido no tiene ninguna hoja con datos.");
+  }
+  const proyectos = extraerProyectos(wbSubido, hojaLeida);
+  if (proyectos.length === 0) {
+    throw new ErrorSharePoint(`No se encontró ningún proyecto en la hoja "${hojaLeida}" del Excel subido.`);
+  }
+
+  await eliminarHojaSiExiste(config, archivo, HOJA_PLANIFICACION_CAPEX);
+  await crearHojaSiNoExiste(config, archivo, HOJA_PLANIFICACION_CAPEX);
+  await escribirFila(config, archivo, HOJA_PLANIFICACION_CAPEX, 1, "A", "E", [
+    "Proyecto",
+    "Sub Negocio",
+    "Grupo de Negocio",
+    "Detalle",
+    "% Avance",
+  ]);
+
+  for (let i = 0; i < proyectos.length; i++) {
+    const p = proyectos[i];
+    await escribirFilaCapex(config, archivo, HOJA_PLANIFICACION_CAPEX, i + 2, {
+      proyecto: p.proyecto,
+      subNegocio: p.subNegocio,
+      grupoNegocio: p.grupoNegocio,
+      detalle: p.detalle,
+      prioridad: p.prioridad,
+      presupuestoAprobado: p.presupuestoAprobado,
+      categoria: p.categoria,
+      status: p.status,
+      opex: p.opex,
+      recurso: p.recurso,
+      responsable: p.responsable,
+      tiempo: p.tiempo,
+      real: p.real,
+      proyectado: p.proyectado,
+    });
+  }
+
+  return { lineas: proyectos.length, hojaLeida };
 }

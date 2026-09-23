@@ -8,7 +8,7 @@ import {
   listarHojas,
   renombrarHoja,
 } from "./sharepoint";
-import { leerWorkbook, ultimaFilaConDatosEscaneada } from "./capex-parse";
+import { leerWorkbook, resolverNombreHoja, ultimaFilaConDatosEscaneada } from "./capex-parse";
 import { columnaALetra } from "./capex-editable";
 import { COL_PPTO_OPEX, extraerPresupuestoOpex } from "./opex-parse";
 import type { ProyectoCapex } from "./capex";
@@ -30,25 +30,33 @@ interface DatosLineaOpexBorrador {
   detalle: string;
   responsable: string;
   presupuestoAprobado: number;
+  /** Solo se completan al IMPORTAR desde un Excel externo (ver `importarBorradorOpex`)
+   *  — al generar el borrador copiando el vivo, quedan en $0 a propósito. */
+  status?: string;
+  real?: number[];
+  proyectado?: number[];
 }
 
 /** Arma la fila completa (A:AI) para una línea de OPEX — "Presupuesto 2026" se lee por
  *  posición de columna, no como Tabla de Excel (ver COL_PPTO_OPEX), así que no hace
  *  falta ninguna Tabla real ni fórmula de por medio: solo escribir los valores en su
- *  columna correcta. Los 24 meses (Proyectado/Real alternados) arrancan en 0. */
+ *  columna correcta. Los 24 meses (Proyectado/Real alternados) arrancan en 0, salvo que
+ *  se importen de un Excel externo. */
 function filaOpex(datos: DatosLineaOpexBorrador): Array<string | number> {
   const fila: Array<string | number> = new Array(COL_PPTO_OPEX.presupuestoAprobado + 1).fill("");
   fila[COL_PPTO_OPEX.empresa] = datos.empresa;
   fila[COL_PPTO_OPEX.grupoGasto] = datos.grupoGasto;
   fila[COL_PPTO_OPEX.subgrupoGasto] = datos.subgrupoGasto;
   fila[COL_PPTO_OPEX.lineaGasto] = datos.lineaGasto;
-  fila[COL_PPTO_OPEX.status] = "Activa";
+  fila[COL_PPTO_OPEX.status] = datos.status || "Activa";
   fila[COL_PPTO_OPEX.moneda] = datos.moneda || "USD";
   fila[COL_PPTO_OPEX.detalle] = datos.detalle;
   fila[COL_PPTO_OPEX.responsable] = datos.responsable;
+  const real = datos.real ?? Array(12).fill(0);
+  const proyectado = datos.proyectado ?? Array(12).fill(0);
   for (let m = 0; m < 12; m++) {
-    fila[COL_PPTO_OPEX.primerMesProyectado + m * 2] = 0;
-    fila[COL_PPTO_OPEX.primerMesReal + m * 2] = 0;
+    fila[COL_PPTO_OPEX.primerMesProyectado + m * 2] = proyectado[m] ?? 0;
+    fila[COL_PPTO_OPEX.primerMesReal + m * 2] = real[m] ?? 0;
   }
   fila[COL_PPTO_OPEX.presupuestoAprobado] = datos.presupuestoAprobado;
   return fila;
@@ -161,4 +169,63 @@ export async function aprobarYActivarOpex(
   await escribirAnioActivo(config, archivo, anioNuevo);
 
   return { anioNuevo, hojaArchivada };
+}
+
+/**
+ * Reemplaza TODO el borrador de planificación de OPEX por lo que traiga un Excel subido
+ * a mano (mismo layout de columnas que "Presupuesto 2026" en vivo, incluido
+ * Proyectado/Real mes a mes) — mismo criterio que `importarBorradorCapex`. Busca la
+ * hoja `hojaViva` dentro del Excel subido; si no la encuentra con ese nombre, usa la
+ * primera hoja del archivo.
+ */
+export async function importarBorradorOpex(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  hojaViva: string,
+  contenidoExcelSubido: Buffer
+): Promise<{ lineas: number; hojaLeida: string }> {
+  const wbSubido = leerWorkbook(contenidoExcelSubido);
+  const nombreResuelto = resolverNombreHoja(wbSubido, hojaViva);
+  const hojaLeida = wbSubido.Sheets[nombreResuelto] ? nombreResuelto : wbSubido.SheetNames[0];
+  if (!hojaLeida) {
+    throw new ErrorSharePoint("El Excel subido no tiene ninguna hoja con datos.");
+  }
+  const lineas = extraerPresupuestoOpex(wbSubido, hojaLeida);
+  if (lineas.length === 0) {
+    throw new ErrorSharePoint(`No se encontró ninguna línea de gasto en la hoja "${hojaLeida}" del Excel subido.`);
+  }
+
+  await eliminarHojaSiExiste(config, archivo, HOJA_PLANIFICACION_OPEX);
+  await crearHojaSiNoExiste(config, archivo, HOJA_PLANIFICACION_OPEX);
+  const encabezado: Array<string | number> = new Array(COL_PPTO_OPEX.presupuestoAprobado + 1).fill("");
+  encabezado[COL_PPTO_OPEX.empresa] = "Empresa";
+  encabezado[COL_PPTO_OPEX.grupoGasto] = "Grupo de Gasto";
+  encabezado[COL_PPTO_OPEX.subgrupoGasto] = "Subgrupo de Gasto";
+  encabezado[COL_PPTO_OPEX.lineaGasto] = "Línea de Gasto";
+  encabezado[COL_PPTO_OPEX.status] = "Status";
+  encabezado[COL_PPTO_OPEX.moneda] = "Moneda";
+  encabezado[COL_PPTO_OPEX.detalle] = "Detalle";
+  encabezado[COL_PPTO_OPEX.responsable] = "Responsable";
+  encabezado[COL_PPTO_OPEX.presupuestoAprobado] = "Ppto Aprobado";
+  await escribirFila(config, archivo, HOJA_PLANIFICACION_OPEX, 1, "A", ULTIMA_COLUMNA, encabezado);
+
+  for (let i = 0; i < lineas.length; i++) {
+    const l = lineas[i];
+    const fila = filaOpex({
+      empresa: l.subNegocio,
+      grupoGasto: l.grupoNegocio,
+      subgrupoGasto: l.prioridad,
+      lineaGasto: l.proyecto,
+      moneda: "USD",
+      detalle: l.detalle,
+      responsable: l.responsable,
+      presupuestoAprobado: l.presupuestoAprobado,
+      status: l.status,
+      real: l.real,
+      proyectado: l.proyectado,
+    });
+    await escribirFila(config, archivo, HOJA_PLANIFICACION_OPEX, i + 2, "A", ULTIMA_COLUMNA, fila);
+  }
+
+  return { lineas: lineas.length, hojaLeida };
 }

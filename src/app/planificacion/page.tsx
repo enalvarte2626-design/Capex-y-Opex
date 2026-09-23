@@ -50,6 +50,7 @@ export default function PlanificacionCapex() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [aprobando, setAprobando] = useState(false);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [mostrarFormNuevo, setMostrarFormNuevo] = useState(false);
@@ -107,6 +108,32 @@ export default function PlanificacionCapex() {
       setMensaje({ tipo: "error", texto: (e as Error).message });
     } finally {
       setGenerando(false);
+    }
+  }
+
+  async function importarExcel(archivoSubido: File) {
+    if (
+      (proyectos?.length ?? 0) > 0 &&
+      !window.confirm(
+        `Importar "${archivoSubido.name}" BORRA todo lo que haya en el borrador ahora mismo y lo reemplaza por completo con lo que traiga ese archivo. ¿Continuar?`
+      )
+    ) {
+      return;
+    }
+    setImportando(true);
+    setMensaje(null);
+    try {
+      const form = new FormData();
+      form.append("archivo", archivoSubido);
+      const res = await fetch("/api/capex/planificacion/importar", { method: "POST", body: form });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo importar el archivo.");
+      setMensaje({ tipo: "ok", texto: `${json.lineas} proyectos importados desde la hoja "${json.hojaLeida}".` });
+      await cargar();
+    } catch (e) {
+      setMensaje({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setImportando(false);
     }
   }
 
@@ -223,13 +250,36 @@ export default function PlanificacionCapex() {
       )}
 
       {(proyectos?.length ?? 0) === 0 && puedeEditar && (
-        <div className="card p-6 text-center">
-          <p className="mb-3" style={{ color: "var(--texto-suave)" }}>
+        <div className="card p-6 text-center flex flex-col items-center gap-3">
+          <p style={{ color: "var(--texto-suave)" }}>
             Todavía no hay ningún borrador de planificación para {anioBorrador}.
           </p>
-          <button className="boton-primario" onClick={generarBorrador} disabled={generando}>
-            {generando ? "Generando…" : `Generar borrador ${anioBorrador ?? ""}`}
-          </button>
+          <div className="flex items-center gap-3">
+            <button className="boton-primario" onClick={generarBorrador} disabled={generando}>
+              {generando ? "Generando…" : `Generar borrador ${anioBorrador ?? ""}`}
+            </button>
+            <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
+              o
+            </span>
+            <label className="boton-secundario" style={{ cursor: importando ? "default" : "pointer", opacity: importando ? 0.6 : 1 }}>
+              {importando ? "Importando…" : "Importar Excel"}
+              <input
+                type="file"
+                accept=".xlsx,.xlsm,.xls"
+                className="hidden"
+                disabled={importando}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (f) importarExcel(f);
+                }}
+              />
+            </label>
+          </div>
+          <p className="text-xs" style={{ color: "var(--texto-suave)" }}>
+            El Excel debe tener el mismo formato de columnas que BD_CAPEX (Proyecto, Grupo, Detalle, Presupuesto
+            Aprobado, meses de Real/Proyectado…) — reemplaza por completo lo que haya en el borrador.
+          </p>
         </div>
       )}
 
@@ -283,6 +333,24 @@ export default function PlanificacionCapex() {
                   <button className="boton-secundario" onClick={generarBorrador} disabled={generando}>
                     {generando ? "Regenerando…" : "Regenerar borrador"}
                   </button>
+                  <label
+                    className="boton-secundario"
+                    style={{ cursor: importando ? "default" : "pointer", opacity: importando ? 0.6 : 1 }}
+                    title="Reemplaza todo el borrador por lo que traiga un Excel con el mismo formato de columnas que BD_CAPEX"
+                  >
+                    {importando ? "Importando…" : "Importar Excel"}
+                    <input
+                      type="file"
+                      accept=".xlsx,.xlsm,.xls"
+                      className="hidden"
+                      disabled={importando}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = "";
+                        if (f) importarExcel(f);
+                      }}
+                    />
+                  </label>
                   <button className="boton-primario" onClick={cargar} disabled={cargando}>
                     {cargando ? "Actualizando…" : "Actualizar"}
                   </button>
