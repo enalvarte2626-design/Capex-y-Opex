@@ -1754,9 +1754,44 @@ function PanoramaTrimestralSection({
     T4: g.subtotal.t[3],
   }));
 
+  function descargarExcel() {
+    const encabezado = ["Grupo / Prioridad", "Total", "T1", "T2", "T3", "T4"];
+    const filasHoja: (string | number)[][] = [];
+    for (const g of panorama.grupos) {
+      filasHoja.push([
+        g.grupoNegocio,
+        Number(g.subtotal.total.toFixed(2)),
+        ...g.subtotal.t.map((v) => Number(v.toFixed(2))),
+      ]);
+      for (const f of g.filas) {
+        filasHoja.push([
+          `  Prioridad ${f.prioridad}`,
+          Number(f.total.toFixed(2)),
+          ...f.t.map((v) => Number(v.toFixed(2))),
+        ]);
+      }
+    }
+    filasHoja.push([
+      "Total general",
+      Number(panorama.total.total.toFixed(2)),
+      ...panorama.total.t.map((v) => Number(v.toFixed(2))),
+    ]);
+
+    const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...filasHoja]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, hoja, titulo.slice(0, 31));
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `${titulo} ${fecha}.xlsx`);
+  }
+
   return (
     <div className="card p-4 h-full flex flex-col">
-      <h2 className="font-semibold mb-4">{titulo}</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold">{titulo}</h2>
+        <button type="button" className="boton-secundario text-xs" onClick={descargarExcel}>
+          Descargar Excel
+        </button>
+      </div>
 
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={datosChart}>
