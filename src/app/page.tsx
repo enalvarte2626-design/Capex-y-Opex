@@ -33,6 +33,7 @@ import {
   type ProyectoCapex,
   type ProyectoResuelto,
 } from "@/lib/capex";
+import * as XLSX from "xlsx";
 import { useMesCierre } from "@/lib/useMesCierre";
 import { useTipoCambio } from "@/lib/useTipoCambio";
 import { usePersistedState } from "@/lib/usePersistedState";
@@ -797,9 +798,61 @@ function PanoramaComparacionMatrizSection({
     );
   }
 
+  function descargarExcel() {
+    const encabezado = ["Grupo de negocio"];
+    trimestres.forEach((t) => encabezado.push(`${t} Proyectado`, `${t} Actual`, `${t} % Var.`, `${t} Diferencia`));
+    encabezado.push("Total año Proyectado", "Total año Actual", "Total año % Var.", "Total año Diferencia");
+
+    const filasHoja = filas.map((f) => {
+      const fila: (string | number)[] = [f.grupo];
+      f.celdas.forEach((c) => {
+        fila.push(
+          Number(c.proy.toFixed(2)),
+          Number(c.act.toFixed(2)),
+          Number(c.pct.toFixed(1)),
+          Number(c.diferencia.toFixed(2))
+        );
+      });
+      fila.push(
+        Number(f.proyTotal.toFixed(2)),
+        Number(f.actTotal.toFixed(2)),
+        Number(f.pctTotal.toFixed(1)),
+        Number((f.actTotal - f.proyTotal).toFixed(2))
+      );
+      return fila;
+    });
+
+    const filaTotal: (string | number)[] = ["Total general"];
+    totalesPorTrimestre.forEach((t) => {
+      filaTotal.push(
+        Number(t.proy.toFixed(2)),
+        Number(t.act.toFixed(2)),
+        Number(t.pct.toFixed(1)),
+        Number((t.act - t.proy).toFixed(2))
+      );
+    });
+    filaTotal.push(
+      Number(proyGeneral.toFixed(2)),
+      Number(actGeneral.toFixed(2)),
+      Number(pctGeneral.toFixed(1)),
+      Number((actGeneral - proyGeneral).toFixed(2))
+    );
+
+    const hoja = XLSX.utils.aoa_to_sheet([encabezado, ...filasHoja, filaTotal]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, hoja, "Panorama");
+    const fecha = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `Panorama actual vs proyectado ${fecha}.xlsx`);
+  }
+
   return (
     <div className="card p-4">
-      <h2 className="font-semibold mb-4">Panorama actual vs. Panorama proyectado, por grupo y trimestre</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold">Panorama actual vs. Panorama proyectado, por grupo y trimestre</h2>
+        <button type="button" className="boton-secundario text-xs" onClick={descargarExcel}>
+          Descargar Excel
+        </button>
+      </div>
 
       <table className="w-full text-sm border-collapse">
         <thead>
