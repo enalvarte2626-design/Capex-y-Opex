@@ -41,3 +41,21 @@ export async function escribirMesCierre(config: ConfiguracionSharePoint, archivo
   );
   await escribirCelda(config, archivo, HOJA_CONFIG, CELDA_VALOR, mes);
 }
+
+/** "Presupuesto 2026.xlsx" + cerrados=8 → "Presupuesto 2026 8+4.xlsx" — mismo patrón
+ *  "N+M" que ya usa CAPEX para sus archivos de cierre (N meses cerrados, M restantes en
+ *  el año). Compartida entre /api/opex/mes-cierre (cierra el mes Y renombra juntos) y
+ *  /api/opex/renombrar-archivo (renombra por adelantado, sin cerrar todavía — para
+ *  poder empezar a trabajar el mes siguiente sin seguir escribiendo sobre un archivo ya
+ *  presentado, igual que "Generar archivo de cierre" en CAPEX). */
+export function construirNombreCierre(nombreActual: string, cerrados: number): string {
+  const restantes = 12 - cerrados;
+  const patronNM = /\d+\s*\+\s*\d+/;
+  if (patronNM.test(nombreActual)) {
+    return nombreActual.replace(patronNM, `${cerrados}+${restantes}`);
+  }
+  const punto = nombreActual.lastIndexOf(".");
+  const base = punto === -1 ? nombreActual : nombreActual.slice(0, punto);
+  const extension = punto === -1 ? "" : nombreActual.slice(punto);
+  return `${base} ${cerrados}+${restantes}${extension}`;
+}

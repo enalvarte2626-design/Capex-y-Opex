@@ -115,6 +115,37 @@ export default function PresupuestoOpex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [renombrando, setRenombrando] = useState(false);
+
+  /** Renombra el archivo en vivo al patrón del PRÓXIMO cierre (ej. "...8+4.xlsx" →
+   *  "...9+3.xlsx") SIN cerrar el mes todavía — para poder empezar a trabajar
+   *  Septiembre sin seguir escribiendo sobre un archivo que ya se presentó como
+   *  cerrado. Las facturas del mes siguiente ya suman solas al Gasto Real (no depende
+   *  de esto, depende del marcador de cierre) — esto es solo el nombre del archivo. */
+  async function renombrarParaProximoMes() {
+    if (mesCierreServidor == null || mesCierreServidor >= 12) return;
+    const proximoMes = mesCierreServidor + 1;
+    const nombreProximoMes = NOMBRES_MES_CIERRE[proximoMes - 1];
+    const confirmado = window.confirm(
+      `¿Renombrar el archivo para reflejar que se va a trabajar ${nombreProximoMes}? Esto NO cierra ningún mes todavía (el marcador de cierre sigue igual) — solo cambia el nombre del archivo en vivo, para no seguir escribiendo sobre uno que ya se presentó.`
+    );
+    if (!confirmado) return;
+
+    setRenombrando(true);
+    setMensajeCierre(null);
+    try {
+      const res = await fetch("/api/opex/renombrar-archivo", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo renombrar el archivo.");
+      setMensajeCierre({ tipo: "ok", texto: `Archivo renombrado a "${json.archivo}".` });
+      await cargar();
+    } catch (e) {
+      setMensajeCierre({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setRenombrando(false);
+    }
+  }
+
   /** Cierra el mes siguiente al que está cerrado hoy (ej. si Julio está cerrado, cierra
    *  Agosto) — de ahí en adelante, cualquier factura nueva registrada en Agosto SÍ suma
    *  automáticamente al Gasto Real. No se puede deshacer desde acá a propósito: cerrar
@@ -390,6 +421,15 @@ export default function PresupuestoOpex() {
         </div>
         {puedeEditar && mesCierreServidor != null && mesCierreServidor < 12 && (
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="boton-secundario"
+              onClick={renombrarParaProximoMes}
+              disabled={renombrando}
+              title="Renombra el archivo en vivo al patrón del próximo cierre, sin cerrar el mes todavía — para no seguir escribiendo sobre un archivo que ya se presentó"
+            >
+              {renombrando ? "Renombrando…" : `Renombrar para ${NOMBRES_MES_CIERRE[mesCierreServidor]}`}
+            </button>
             <button
               type="button"
               className="boton-secundario"
