@@ -115,47 +115,49 @@ export default function PresupuestoOpex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [renombrando, setRenombrando] = useState(false);
+  const [generandoArchivo, setGenerandoArchivo] = useState(false);
 
-  /** Renombra el archivo en vivo al patrón del PRÓXIMO cierre (ej. "...8+4.xlsx" →
-   *  "...9+3.xlsx") SIN cerrar el mes todavía — para poder empezar a trabajar
-   *  Septiembre sin seguir escribiendo sobre un archivo que ya se presentó como
-   *  cerrado. Las facturas del mes siguiente ya suman solas al Gasto Real (no depende
-   *  de esto, depende del marcador de cierre) — esto es solo el nombre del archivo. */
-  async function renombrarParaProximoMes() {
+  /** Genera el archivo del siguiente cierre (ej. "...8+4.xlsx" → "...9+3.xlsx") como una
+   *  COPIA nueva — el archivo actual NO se toca, igual que "Generar archivo de cierre"
+   *  en CAPEX. La app detecta sola el archivo nuevo como "el vivo" apenas se crea (mayor
+   *  N en la carpeta). Esto no cierra ningún mes por sí solo — el marcador de cierre se
+   *  actualiza aparte, con "Cerrar mes". */
+  async function generarArchivoDeCierre() {
     if (mesCierreServidor == null || mesCierreServidor >= 12) return;
     const proximoMes = mesCierreServidor + 1;
     const nombreProximoMes = NOMBRES_MES_CIERRE[proximoMes - 1];
     const confirmado = window.confirm(
-      `¿Renombrar el archivo para reflejar que se va a trabajar ${nombreProximoMes}? Esto NO cierra ningún mes todavía (el marcador de cierre sigue igual) — solo cambia el nombre del archivo en vivo, para no seguir escribiendo sobre uno que ya se presentó.`
+      `¿Generar el archivo del siguiente cierre (para trabajar ${nombreProximoMes})? Esto crea un archivo NUEVO en la misma carpeta de SharePoint (copia del actual). El archivo actual no se modifica. Esto NO cierra ningún mes todavía. ¿Continuar?`
     );
     if (!confirmado) return;
 
-    setRenombrando(true);
+    setGenerandoArchivo(true);
     setMensajeCierre(null);
     try {
-      const res = await fetch("/api/opex/renombrar-archivo", { method: "POST" });
+      const res = await fetch("/api/opex/generar-archivo-cierre", { method: "POST" });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "No se pudo renombrar el archivo.");
-      setMensajeCierre({ tipo: "ok", texto: `Archivo renombrado a "${json.archivo}".` });
+      if (!res.ok) throw new Error(json.error || "No se pudo generar el archivo.");
+      setMensajeCierre({ tipo: "ok", texto: `Archivo "${json.archivo}" creado correctamente.` });
       await cargar();
     } catch (e) {
       setMensajeCierre({ tipo: "error", texto: (e as Error).message });
     } finally {
-      setRenombrando(false);
+      setGenerandoArchivo(false);
     }
   }
 
   /** Cierra el mes siguiente al que está cerrado hoy (ej. si Julio está cerrado, cierra
    *  Agosto) — de ahí en adelante, cualquier factura nueva registrada en Agosto SÍ suma
-   *  automáticamente al Gasto Real. No se puede deshacer desde acá a propósito: cerrar
-   *  un mes es una decisión real de negocio, no un ajuste de pantalla. */
+   *  automáticamente al Gasto Real. Ya no toca ningún archivo (eso lo hace "Generar
+   *  archivo de cierre", aparte) — solo mueve el marcador. No se puede deshacer desde
+   *  acá a propósito: cerrar un mes es una decisión real de negocio, no un ajuste de
+   *  pantalla. */
   async function cerrarMesSiguiente() {
     if (mesCierreServidor == null || mesCierreServidor >= 12) return;
     const mesNuevo = mesCierreServidor + 1;
     const nombreMesNuevo = NOMBRES_MES_CIERRE[mesNuevo - 1];
     const confirmado = window.confirm(
-      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto ${anio} al registrarla — hasta ahora quedaba solo en el historial. El archivo se va a renombrar para reflejar el nuevo cierre.`
+      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de Presupuesto ${anio} al registrarla — hasta ahora quedaba solo en el historial.`
     );
     if (!confirmado) return;
 
@@ -171,10 +173,7 @@ export default function PresupuestoOpex() {
       if (!res.ok) throw new Error(json.error || "No se pudo cerrar el mes.");
       setMesCierreServidor(json.mesCierre);
       setMesCierre(json.mesCierre);
-      setMensajeCierre({
-        tipo: "ok",
-        texto: `${json.nombreMesCierre} cerrado.${json.archivo ? ` Archivo renombrado a "${json.archivo}".` : ""}`,
-      });
+      setMensajeCierre({ tipo: "ok", texto: `${json.nombreMesCierre} cerrado.` });
     } catch (e) {
       setMensajeCierre({ tipo: "error", texto: (e as Error).message });
     } finally {
@@ -424,11 +423,11 @@ export default function PresupuestoOpex() {
             <button
               type="button"
               className="boton-secundario"
-              onClick={renombrarParaProximoMes}
-              disabled={renombrando}
-              title="Renombra el archivo en vivo al patrón del próximo cierre, sin cerrar el mes todavía — para no seguir escribiendo sobre un archivo que ya se presentó"
+              onClick={generarArchivoDeCierre}
+              disabled={generandoArchivo}
+              title="Crea un archivo nuevo en SharePoint para el siguiente mes, igual que en CAPEX — el archivo actual no se modifica"
             >
-              {renombrando ? "Renombrando…" : `Renombrar para ${NOMBRES_MES_CIERRE[mesCierreServidor]}`}
+              {generandoArchivo ? "Generando…" : "Generar archivo de cierre"}
             </button>
             <button
               type="button"

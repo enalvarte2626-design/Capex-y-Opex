@@ -1,5 +1,5 @@
 import type { ArchivoResuelto, ConfiguracionSharePoint } from "./sharepoint";
-import { crearHojaSiNoExiste, escribirCelda, leerCelda } from "./sharepoint";
+import { ErrorSharePoint, crearArchivo, crearHojaSiNoExiste, descargarContenido, escribirCelda, leerCelda, listarNombresCarpeta } from "./sharepoint";
 import { MES_CIERRE_POR_DEFECTO } from "./opex-constantes";
 
 /**
@@ -44,10 +44,7 @@ export async function escribirMesCierre(config: ConfiguracionSharePoint, archivo
 
 /** "Presupuesto 2026.xlsx" + cerrados=8 → "Presupuesto 2026 8+4.xlsx" — mismo patrón
  *  "N+M" que ya usa CAPEX para sus archivos de cierre (N meses cerrados, M restantes en
- *  el año). Compartida entre /api/opex/mes-cierre (cierra el mes Y renombra juntos) y
- *  /api/opex/renombrar-archivo (renombra por adelantado, sin cerrar todavía — para
- *  poder empezar a trabajar el mes siguiente sin seguir escribiendo sobre un archivo ya
- *  presentado, igual que "Generar archivo de cierre" en CAPEX). */
+ *  el año). Usada por `generarArchivoDeCierreOpex` para nombrar la copia nueva. */
 export function construirNombreCierre(nombreActual: string, cerrados: number): string {
   const restantes = 12 - cerrados;
   const patronNM = /\d+\s*\+\s*\d+/;
@@ -58,4 +55,39 @@ export function construirNombreCierre(nombreActual: string, cerrados: number): s
   const base = punto === -1 ? nombreActual : nombreActual.slice(0, punto);
   const extension = punto === -1 ? "" : nombreActual.slice(punto);
   return `${base} ${cerrados}+${restantes}${extension}`;
+}
+
+/**
+ * Genera el archivo del siguiente cierre de OPEX: una COPIA exacta del archivo en vivo,
+ * con el nombre que sigue en la numeración "N+M" (ej. "8+4" → "9+3") — mismo criterio
+ * que "Generar archivo de cierre" en CAPEX. El archivo actual NO se toca (nunca se
+ * renombra ni se modifica), así que queda protegido tal como se presentó; el nuevo
+ * archivo pasa a ser "el vivo" en cuanto la app lo detecta (mayor N en la carpeta).
+ *
+ * A diferencia de CAPEX, OPEX no tiene ninguna fórmula de Forecast en el Excel que haga
+ * falta reescribir (el Forecast se calcula aparte, en la propia app, a partir de estas
+ * mismas celdas) — por eso acá alcanza con copiar el archivo tal cual, sin tocar
+ * ninguna celda del archivo nuevo.
+ */
+export async function generarArchivoDeCierreOpex(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto
+): Promise<{ archivo: string }> {
+  const mesCierreActual = await leerMesCierre(config, archivo);
+  if (mesCierreActual >= 12) {
+    throw new ErrorSharePoint("Ya no quedan meses por cerrar este año.");
+  }
+  const nuevoNombre = construirNombreCierre(archivo.nombre, mesCierreActual + 1);
+  if (nuevoNombre.toLowerCase() === archivo.nombre.toLowerCase()) {
+    throw new ErrorSharePoint(`El archivo ya se llama "${nuevoNombre}".`);
+  }
+
+  const existentes = await listarNombresCarpeta(config, archivo.driveId, archivo.carpetaId);
+  if (existentes.some((n) => n.toLowerCase() === nuevoNombre.toLowerCase())) {
+    throw new ErrorSharePoint(`Ya existe un archivo llamado "${nuevoNombre}" en esa carpeta.`);
+  }
+
+  const contenido = await descargarContenido(config, archivo);
+  const nuevoArchivo = await crearArchivo(config, archivo.driveId, archivo.carpetaId, nuevoNombre, contenido);
+  return { archivo: nuevoArchivo.nombre };
 }

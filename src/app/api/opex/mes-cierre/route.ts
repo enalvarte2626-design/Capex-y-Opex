@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
-import {
-  ErrorSharePoint,
-  camposFaltantesOpex,
-  obtenerConfiguracionOpex,
-  renombrarArchivo,
-  resolverArchivoPorShareUrl,
-} from "@/lib/sharepoint";
-import { construirNombreCierre, leerMesCierre, escribirMesCierre } from "@/lib/mesCierreConfig";
+import { ErrorSharePoint, camposFaltantesOpex, obtenerConfiguracionOpex, resolverArchivoPorShareUrl } from "@/lib/sharepoint";
+import { leerMesCierre, escribirMesCierre } from "@/lib/mesCierreConfig";
 import { NOMBRES_MES_CIERRE } from "@/lib/capex";
 
 export const dynamic = "force-dynamic";
@@ -65,16 +59,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const nuevoNombre = construirNombreCierre(archivo.nombre, mesNuevo);
-    if (nuevoNombre.toLowerCase() !== archivo.nombre.toLowerCase()) {
-      await renombrarArchivo(config, archivo.driveId, archivo.itemId, nuevoNombre);
-    }
     await escribirMesCierre(config, archivo, mesNuevo);
     return NextResponse.json({
       ok: true,
       mesCierre: mesNuevo,
       nombreMesCierre: NOMBRES_MES_CIERRE[mesNuevo - 1],
-      archivo: nuevoNombre,
     });
   } catch (e) {
     const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
