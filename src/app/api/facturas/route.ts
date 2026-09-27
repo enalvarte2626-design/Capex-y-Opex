@@ -46,6 +46,7 @@ export async function GET() {
         subNegocio: p.subNegocio,
       })),
       facturas,
+      archivo: archivo.nombre,
       actualizadoEn: new Date().toISOString(),
     });
   } catch (e) {

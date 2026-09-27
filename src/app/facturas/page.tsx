@@ -25,7 +25,18 @@ interface FacturaConResolucion extends FacturaCapex {
 interface Respuesta {
   proyectos: ProyectoOpcion[];
   facturas: FacturaConResolucion[];
+  archivo: string;
   actualizadoEn: string;
+}
+
+/** "Control Capex Forecast 8+4.xlsm" → 8 — mismo criterio que usa el servidor en
+ *  /api/facturas/registrar para saber qué mes ya está cerrado (CAPEX no tiene un
+ *  marcador de cierre guardado adentro del Excel: el nombre del archivo en vivo ES el
+ *  mes de cierre). Solo se usa acá para avisar de antemano en el diálogo de
+ *  confirmación — el servidor vuelve a calcularlo por su cuenta, nunca confía en esto. */
+function mesesCerradosPorNombreArchivo(nombre: string): number {
+  const m = nombre.match(/(\d+)\s*\+\s*(\d+)/);
+  return m ? Number(m[1]) : 0;
 }
 
 const HOY = () => new Date().toISOString().slice(0, 10);
@@ -71,6 +82,8 @@ export default function Facturas() {
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
   const [migrando, setMigrando] = useState(false);
   const [mensajeMigracion, setMensajeMigracion] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+
+  const mesCierre = useMemo(() => mesesCerradosPorNombreArchivo(datos?.archivo ?? ""), [datos?.archivo]);
 
   /** Migración de datos, un solo uso: copia el mes que ya tenían las facturas antiguas
    *  (texto "Periodo X" en Comentarios) a la nueva columna "Mes Real", y limpia el
@@ -315,8 +328,12 @@ export default function Facturas() {
         : form.moneda === "EUR"
           ? `€ ${monto.toFixed(2)} — equivale a ${moneda2(montoUsd)} al tipo de cambio ${TIPO_CAMBIO_EUR_POR_DEFECTO}`
           : `${moneda2(monto)}`;
+    const esMesPasado = Number(form.mes) <= mesCierre;
     const confirmado = window.confirm(
-      `¿Registrar ${esDescuento ? "un descuento/nota de crédito" : "factura"} de ${descripcionMonto} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? Esto ${esDescuento ? "resta" : "suma"} ${moneda2(Math.abs(montoUsd))} al Gasto Real de ${mesTexto} en BD_CAPEX y agrega una fila en la hoja de facturas.`
+      `¿Registrar ${esDescuento ? "un descuento/nota de crédito" : "factura"} de ${descripcionMonto} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? ` +
+        (esMesPasado
+          ? `${mesTexto} ya está cerrado (archivo ${datos?.archivo}): esto NO va a sumar al Gasto Real de BD_CAPEX, solo queda en el historial.`
+          : `Esto ${esDescuento ? "resta" : "suma"} ${moneda2(Math.abs(montoUsd))} al Gasto Real de ${mesTexto} en BD_CAPEX.`)
     );
     if (!confirmado) return;
 
@@ -344,7 +361,9 @@ export default function Facturas() {
       if (!res.ok) throw new Error(json.error || "No se pudo registrar la factura.");
       setMensaje({
         tipo: "ok",
-        texto: `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`,
+        texto: json.presupuestoActualizado
+          ? `Factura registrada (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). Gasto Real de ${mesTexto}: ${moneda2(json.gastoRealAnterior)} → ${moneda2(json.gastoRealNuevo)}.`
+          : `Factura registrada en el historial (${moneda2(json.monto)} al tipo de cambio ${json.tipoCambio}). ${json.aviso ?? "No se modificó el Gasto Real de BD_CAPEX."}`,
       });
       // Limpia todo el formulario para el siguiente registro — nada debe quedar pegado
       // de esta factura (Proyecto, Detalle, Responsable, Empresa, RUC, etc.).

@@ -26,6 +26,17 @@ export const dynamic = "force-dynamic";
 
 const HOJA_FACTURAS = "Control de Facturas-Capex 25fEB";
 
+/** "Control Capex Forecast 8+4.xlsm" → 8 (meses cerrados) — a diferencia de OPEX, CAPEX
+ *  no tiene un marcador de cierre guardado dentro del Excel: el "mes de cierre" ES el
+ *  nombre del archivo en vivo (mismo criterio que ya usa el resto de la app para elegir
+ *  automáticamente cuál archivo de la carpeta es "el vivo" y para sugerir "Meses
+ *  cerrados" en Comparar cierre). Un archivo sin ese patrón (ej. recién creado a mano)
+ *  se trata como 0 meses cerrados — ningún mes queda protegido hasta que exista. */
+function mesesCerradosPorNombreArchivo(nombre: string): number {
+  const m = nombre.match(/(\d+)\s*\+\s*(\d+)/);
+  return m ? Number(m[1]) : 0;
+}
+
 interface CuerpoRegistro {
   filaProyecto: number;
   mes: number; // 1-12
@@ -115,6 +126,14 @@ export async function POST(request: Request) {
     const archivo = await resolverArchivoPorShareUrl(config);
     const hojaProyectos = process.env.SP_CAPEX_HOJA?.trim() || "BD_CAPEX";
 
+    // Un mes ya CERRADO (según el nombre del archivo en vivo, ej. "8+4" = Agosto
+    // cerrado) sí se puede registrar — queda en el historial de facturas — pero NUNCA
+    // suma al Gasto Real de BD_CAPEX, para no mover un presupuesto que ya se presentó
+    // como cerrado. Mismo criterio que ya usa OPEX, solo que acá el "mes de cierre" es
+    // el nombre del archivo en vez de un marcador guardado adentro.
+    const mesCierre = mesesCerradosPorNombreArchivo(archivo.nombre);
+    const esMesPasado = mes <= mesCierre;
+
     // 1) Confirma que la fila de proyecto existe y arma el texto a guardar en "Proyecto".
     const contenido = await descargarContenido(config, archivo);
     const wb = leerWorkbook(contenido);
@@ -149,7 +168,7 @@ export async function POST(request: Request) {
       textoProyecto,
       monto,
       numeroFactura,
-      "ok",
+      esMesPasado ? "ok (mes pasado, no afecta presupuesto)" : "ok",
       comentarioExtra?.trim() ?? "",
       moneda,
       montoSoles ?? "",
@@ -159,6 +178,21 @@ export async function POST(request: Request) {
       montoEuros ?? "",
       moneda === "EUR" ? tipoCambioEur : "",
     ]);
+
+    // Un mes pasado queda solo en el historial de facturas — nunca toca BD_CAPEX.
+    if (esMesPasado) {
+      return NextResponse.json({
+        ok: true,
+        filaFactura: filaNueva,
+        monto,
+        montoSoles,
+        tipoCambio,
+        montoEuros,
+        tipoCambioEur: moneda === "EUR" ? tipoCambioEur : null,
+        presupuestoActualizado: false,
+        aviso: `Mes pasado: la factura quedó registrada en el historial, pero no se sumó al Gasto Real de ${hojaProyectos}.`,
+      });
+    }
 
     // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en BD_CAPEX (no
     //    reemplaza: un proyecto puede tener varias facturas en el mismo mes).
@@ -176,6 +210,7 @@ export async function POST(request: Request) {
       tipoCambio,
       montoEuros,
       tipoCambioEur: moneda === "EUR" ? tipoCambioEur : null,
+      presupuestoActualizado: true,
       celdaActualizada: `${hojaProyectos}!${direccionReal}`,
       gastoRealAnterior: valorActual,
       gastoRealNuevo: nuevoValor,
