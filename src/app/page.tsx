@@ -114,6 +114,8 @@ export default function DashboardCapex() {
   const [mesCierre, setMesCierre] = useMesCierre();
   const [generandoCierre, setGenerandoCierre] = useState(false);
   const [mensajeCierre, setMensajeCierre] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
+  const [mesCierreServidor, setMesCierreServidor] = useState<number | null>(null);
+  const [cerrandoMes, setCerrandoMes] = useState(false);
   const [mostrarSoles, setMostrarSoles] = usePersistedState("capex-dashboard-mostrarSoles", false);
   const [tipoCambio, setTipoCambio] = useTipoCambio();
 
@@ -180,6 +182,60 @@ export default function DashboardCapex() {
     cargar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Mes de cierre REAL (independiente del selector de arriba, que es solo una
+  // preferencia local) — guardado en el Excel, igual que ya hace OPEX. Decide si una
+  // factura nueva suma o no al Gasto Real (ver /api/facturas/registrar). Al cargar, el
+  // selector de arriba se sincroniza con este valor para que el Dashboard arranque
+  // mostrando el corte real.
+  useEffect(() => {
+    fetch("/api/capex/mes-cierre", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Number.isInteger(j?.mesCierre)) {
+          setMesCierreServidor(j.mesCierre);
+          setMesCierre(j.mesCierre);
+        }
+      })
+      .catch(() => {
+        /* si falla, el selector se queda con lo que ya tenía guardado en localStorage */
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Cierra el mes siguiente al que está cerrado hoy — de ahí en adelante, cualquier
+   *  factura nueva registrada en ese mes SÍ suma automáticamente al Gasto Real.
+   *  Separado a propósito de "Generar archivo de cierre": generar el archivo nuevo ya
+   *  no cierra nada por sí solo, son dos decisiones independientes. No se puede
+   *  deshacer desde acá a propósito: cerrar un mes es una decisión real de negocio. */
+  async function cerrarMesSiguiente() {
+    if (mesCierreServidor == null || mesCierreServidor >= 12) return;
+    const mesNuevo = mesCierreServidor + 1;
+    const nombreMesNuevo = NOMBRES_MES_CIERRE[mesNuevo - 1];
+    const confirmado = window.confirm(
+      `¿Cerrar ${nombreMesNuevo}? De ahora en adelante, toda factura nueva que se registre para ${nombreMesNuevo} va a sumar automáticamente al Gasto Real de BD_CAPEX al registrarla — hasta ahora quedaba solo en el historial.`
+    );
+    if (!confirmado) return;
+
+    setCerrandoMes(true);
+    setMensajeCierre(null);
+    try {
+      const res = await fetch("/api/capex/mes-cierre", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mes: mesNuevo }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo cerrar el mes.");
+      setMesCierreServidor(json.mesCierre);
+      setMesCierre(json.mesCierre);
+      setMensajeCierre({ tipo: "ok", texto: `${json.nombreMesCierre} cerrado.` });
+    } catch (e) {
+      setMensajeCierre({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setCerrandoMes(false);
+    }
+  }
 
   const proyectosCrudos = datos?.proyectos ?? [];
   const proyeccion = datos?.proyeccion ?? [];
@@ -336,9 +392,19 @@ export default function DashboardCapex() {
               className="boton-secundario"
               onClick={generarArchivoDeCierre}
               disabled={generandoCierre || !datos}
-              title="Crea un archivo nuevo en SharePoint para el siguiente mes cerrado (ej. 7+5 → 8+4), igual que ya haces a mano cada mes."
+              title="Crea un archivo nuevo en SharePoint para el siguiente mes (ej. 7+5 → 8+4) — no cierra ningún mes por sí solo."
             >
               {generandoCierre ? "Generando…" : "Generar archivo de cierre"}
+            </button>
+          )}
+          {puedeEditar && mesCierreServidor != null && mesCierreServidor < 12 && (
+            <button
+              className="boton-secundario"
+              onClick={cerrarMesSiguiente}
+              disabled={cerrandoMes}
+              title="Cierra el gasto de ese mes de verdad — de ahí en adelante, las facturas nuevas de ese mes suman solas al presupuesto"
+            >
+              {cerrandoMes ? "Cerrando…" : `Cerrar ${NOMBRES_MES_CIERRE[mesCierreServidor]}`}
             </button>
           )}
           <button className="boton-primario" onClick={cargar} disabled={cargando}>

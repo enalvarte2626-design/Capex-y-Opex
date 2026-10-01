@@ -21,21 +21,11 @@ import {
 } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
 import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
+import { leerMesCierre, mesesCerradosPorNombreArchivo } from "@/lib/mesCierreConfig";
 
 export const dynamic = "force-dynamic";
 
 const HOJA_FACTURAS = "Control de Facturas-Capex 25fEB";
-
-/** "Control Capex Forecast 8+4.xlsm" → 8 (meses cerrados) — a diferencia de OPEX, CAPEX
- *  no tiene un marcador de cierre guardado dentro del Excel: el "mes de cierre" ES el
- *  nombre del archivo en vivo (mismo criterio que ya usa el resto de la app para elegir
- *  automáticamente cuál archivo de la carpeta es "el vivo" y para sugerir "Meses
- *  cerrados" en Comparar cierre). Un archivo sin ese patrón (ej. recién creado a mano)
- *  se trata como 0 meses cerrados — ningún mes queda protegido hasta que exista. */
-function mesesCerradosPorNombreArchivo(nombre: string): number {
-  const m = nombre.match(/(\d+)\s*\+\s*(\d+)/);
-  return m ? Number(m[1]) : 0;
-}
 
 interface CuerpoRegistro {
   filaProyecto: number;
@@ -126,12 +116,13 @@ export async function POST(request: Request) {
     const archivo = await resolverArchivoPorShareUrl(config);
     const hojaProyectos = process.env.SP_CAPEX_HOJA?.trim() || "BD_CAPEX";
 
-    // Un mes ya CERRADO (según el nombre del archivo en vivo, ej. "8+4" = Agosto
-    // cerrado) sí se puede registrar — queda en el historial de facturas — pero NUNCA
-    // suma al Gasto Real de BD_CAPEX, para no mover un presupuesto que ya se presentó
-    // como cerrado. Mismo criterio que ya usa OPEX, solo que acá el "mes de cierre" es
-    // el nombre del archivo en vez de un marcador guardado adentro.
-    const mesCierre = mesesCerradosPorNombreArchivo(archivo.nombre);
+    // Un mes ya CERRADO sí se puede registrar — queda en el historial de facturas —
+    // pero NUNCA suma al Gasto Real de BD_CAPEX, para no mover un presupuesto que ya se
+    // presentó como cerrado. El "mes de cierre" es un marcador independiente (hoja
+    // "Config App", mismo criterio que OPEX) que solo avanza desde el botón "Cerrar
+    // mes" del Dashboard — generar el archivo del siguiente cierre (ej. "8+4" → "9+3")
+    // YA NO cierra nada por sí solo, son dos decisiones separadas.
+    const mesCierre = await leerMesCierre(config, archivo, Math.max(0, mesesCerradosPorNombreArchivo(archivo.nombre) - 1));
     const esMesPasado = mes <= mesCierre;
 
     // 1) Confirma que la fila de proyecto existe y arma el texto a guardar en "Proyecto".

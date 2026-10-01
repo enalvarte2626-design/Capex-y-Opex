@@ -29,16 +29,6 @@ interface Respuesta {
   actualizadoEn: string;
 }
 
-/** "Control Capex Forecast 8+4.xlsm" → 8 — mismo criterio que usa el servidor en
- *  /api/facturas/registrar para saber qué mes ya está cerrado (CAPEX no tiene un
- *  marcador de cierre guardado adentro del Excel: el nombre del archivo en vivo ES el
- *  mes de cierre). Solo se usa acá para avisar de antemano en el diálogo de
- *  confirmación — el servidor vuelve a calcularlo por su cuenta, nunca confía en esto. */
-function mesesCerradosPorNombreArchivo(nombre: string): number {
-  const m = nombre.match(/(\d+)\s*\+\s*(\d+)/);
-  return m ? Number(m[1]) : 0;
-}
-
 const HOY = () => new Date().toISOString().slice(0, 10);
 
 /** Mismo formulario "en blanco" tanto para el estado inicial como para limpiarlo por
@@ -83,7 +73,21 @@ export default function Facturas() {
   const [migrando, setMigrando] = useState(false);
   const [mensajeMigracion, setMensajeMigracion] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
-  const mesCierre = useMemo(() => mesesCerradosPorNombreArchivo(datos?.archivo ?? ""), [datos?.archivo]);
+  // Mes de cierre REAL (guardado en el Excel, "Config App") — decide si esta factura
+  // suma o no al Gasto Real al registrarla. Solo se usa acá para avisar de antemano en
+  // el diálogo de confirmación; el servidor vuelve a calcularlo por su cuenta en
+  // /api/facturas/registrar, nunca confía en esto.
+  const [mesCierre, setMesCierre] = useState(0);
+  useEffect(() => {
+    fetch("/api/capex/mes-cierre", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Number.isInteger(j?.mesCierre)) setMesCierre(j.mesCierre);
+      })
+      .catch(() => {
+        /* si falla, se queda en 0 (nada protegido) — el servidor igual valida cada registro */
+      });
+  }, []);
 
   /** Migración de datos, un solo uso: copia el mes que ya tenían las facturas antiguas
    *  (texto "Periodo X" en Comentarios) a la nueva columna "Mes Real", y limpia el
@@ -332,7 +336,7 @@ export default function Facturas() {
     const confirmado = window.confirm(
       `¿Registrar ${esDescuento ? "un descuento/nota de crédito" : "factura"} de ${descripcionMonto} para "${proyectoElegido.proyecto} — ${proyectoElegido.detalle || "(sin detalle)"}", período ${mesTexto}? ` +
         (esMesPasado
-          ? `${mesTexto} ya está cerrado (archivo ${datos?.archivo}): esto NO va a sumar al Gasto Real de BD_CAPEX, solo queda en el historial.`
+          ? `${mesTexto} ya está cerrado: esto NO va a sumar al Gasto Real de BD_CAPEX, solo queda en el historial.`
           : `Esto ${esDescuento ? "resta" : "suma"} ${moneda2(Math.abs(montoUsd))} al Gasto Real de ${mesTexto} en BD_CAPEX.`)
     );
     if (!confirmado) return;

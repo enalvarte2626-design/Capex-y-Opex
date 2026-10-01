@@ -18,15 +18,31 @@ const CELDA_ETIQUETA = "A1";
 const CELDA_VALOR = "B1";
 
 /** Mes de cierre actual — si la hoja "Config App" todavía no existe (nadie cerró ningún
- *  mes desde el botón todavía), usa MES_CIERRE_POR_DEFECTO como punto de partida. */
-export async function leerMesCierre(config: ConfiguracionSharePoint, archivo: ArchivoResuelto): Promise<number> {
+ *  mes desde el botón todavía), usa `valorPorDefecto` como punto de partida (OPEX pasa
+ *  MES_CIERRE_POR_DEFECTO; CAPEX pasa lo que sugiera el nombre del archivo actual, ver
+ *  /api/capex/mes-cierre, para no "perder" de golpe los meses que ya estaban cerrados
+ *  según el patrón "N+M" del archivo). */
+export async function leerMesCierre(
+  config: ConfiguracionSharePoint,
+  archivo: ArchivoResuelto,
+  valorPorDefecto: number = MES_CIERRE_POR_DEFECTO
+): Promise<number> {
   try {
     const valor = await leerCelda(config, archivo, HOJA_CONFIG, CELDA_VALOR);
     if (Number.isInteger(valor) && valor >= 1 && valor <= 12) return valor;
   } catch {
     // La hoja "Config App" todavía no existe — nadie cerró ningún mes desde el botón.
   }
-  return MES_CIERRE_POR_DEFECTO;
+  return valorPorDefecto;
+}
+
+/** "Control Capex Forecast 8+4.xlsm" → 8 — el patrón "N+M" del nombre del archivo en
+ *  vivo de CAPEX, usado como valor de arranque de `leerMesCierre` la primera vez (antes
+ *  de que exista la hoja "Config App" en ese archivo). Un archivo sin ese patrón se
+ *  trata como 0 meses cerrados. */
+export function mesesCerradosPorNombreArchivo(nombre: string): number {
+  const m = nombre.match(/(\d+)\s*\+\s*(\d+)/);
+  return m ? Number(m[1]) : 0;
 }
 
 /** Guarda un nuevo mes de cierre — crea la hoja "Config App" la primera vez que hace falta. */
