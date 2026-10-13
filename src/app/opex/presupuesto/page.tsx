@@ -352,6 +352,19 @@ export default function PresupuestoOpex() {
     [filtradas]
   );
 
+  /** Suma de Real y Proyectado de todas las líneas, mes a mes — solo hace falta cuando
+   *  "Ver meses" está activo. */
+  const totalesPorMes = useMemo(
+    () =>
+      NOMBRES_MES.map((_, mi) =>
+        filtradas.reduce(
+          (acc, l) => ({ real: acc.real + l.real[mi], proyectado: acc.proyectado + l.proyectado[mi] }),
+          { real: 0, proyectado: 0 }
+        )
+      ),
+    [filtradas]
+  );
+
   if (cargando && !lineas) {
     return <p style={{ color: "var(--texto-suave)" }}>Cargando datos desde SharePoint…</p>;
   }
@@ -821,7 +834,23 @@ export default function PresupuestoOpex() {
                 <td className="py-2 px-3 text-center text-xs font-bold whitespace-nowrap" style={ESTILO_DESTACADO}>
                   {moneda2(totales.diferencia)}
                 </td>
-                {mesesVisibles && <td colSpan={totalSubcolumnasMeses} style={{ background: "var(--bg)" }}></td>}
+                {mesesVisibles &&
+                  mesesConSubcolumnas.flatMap((m) =>
+                    m.subcolumnas.map((s) => (
+                      <td
+                        key={`total-${m.mi}-${s}`}
+                        className="py-2 px-3 text-center text-xs font-bold whitespace-nowrap"
+                        style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined, background: "var(--bg)" }}
+                      >
+                        {moneda2(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado)}
+                        {mostrarSoles && (
+                          <span className="block text-[10px] font-normal" style={{ color: "var(--texto-suave)" }}>
+                            {soles(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado, tipoCambio)}
+                          </span>
+                        )}
+                      </td>
+                    ))
+                  )}
               </tr>
             </tfoot>
           </table>

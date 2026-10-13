@@ -461,6 +461,19 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
     [filtrados]
   );
 
+  /** Suma de Real y Proyectado de todos los proyectos, mes a mes — solo hace falta cuando
+   *  "Ver meses" está activo. */
+  const totalesPorMes = useMemo(
+    () =>
+      NOMBRES_MES.map((_, mi) =>
+        filtrados.reduce(
+          (acc, p) => ({ real: acc.real + p.real[mi], proyectado: acc.proyectado + p.proyectado[mi] }),
+          { real: 0, proyectado: 0 }
+        )
+      ),
+    [filtrados]
+  );
+
   function ordenarPor(columna: Columna) {
     setOrden((prev) => (prev.columna === columna ? { columna, asc: !prev.asc } : { columna, asc: false }));
   }
@@ -960,7 +973,23 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
                 <td className="py-2 px-3 text-center font-bold whitespace-nowrap" style={ESTILO_DESTACADO}>
                   {moneda2(totales.diferencia)}
                 </td>
-                {mesesVisibles && <td colSpan={totalSubcolumnasMeses} style={{ background: "var(--bg)" }}></td>}
+                {mesesVisibles &&
+                  mesesConSubcolumnas.flatMap((m) =>
+                    m.subcolumnas.map((s) => (
+                      <td
+                        key={`total-${m.mi}-${s}`}
+                        className="py-2 px-3 text-center text-xs font-bold whitespace-nowrap"
+                        style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined, background: "var(--bg)" }}
+                      >
+                        {moneda2(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado)}
+                        {mostrarSoles && (
+                          <span className="block text-[10px] font-normal" style={{ color: "var(--texto-suave)" }}>
+                            {soles(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado, tipoCambio)}
+                          </span>
+                        )}
+                      </td>
+                    ))
+                  )}
               </tr>
             </tfoot>
           </table>
