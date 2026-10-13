@@ -3,6 +3,19 @@
 import { useEffect, useState } from "react";
 import { moneda2 } from "@/lib/format";
 
+/** "100+50+25" → 175, "200-50" → 150 — deja escribir una suma/resta de varios montos
+ *  directo en el campo, sin tener que abrir el panel "Σ". Solo entiende números, "+" y
+ *  "-" (nada de multiplicación, paréntesis, etc. — para eso está el panel "Σ"); si el
+ *  texto no es una suma válida devuelve null y no guarda nada. */
+function evaluarSuma(texto: string): number | null {
+  const limpio = texto.replace(/\s+/g, "");
+  if (limpio === "") return 0;
+  if (!/^[+-]?\d+(\.\d+)?([+-]\d+(\.\d+)?)*$/.test(limpio)) return null;
+  const terminos = limpio.match(/[+-]?\d+(\.\d+)?/g) ?? [];
+  const suma = terminos.reduce((acc, t) => acc + Number(t), 0);
+  return Math.round(suma * 100) / 100;
+}
+
 interface Props {
   fila: number;
   campo: string;
@@ -90,11 +103,12 @@ export default function CampoMontoSumado({
   async function guardarSimple() {
     setEnfocado(false);
     const texto = valorLocal.trim();
-    const numero = Number(texto || 0);
-    if (!Number.isFinite(numero)) {
+    const numero = evaluarSuma(texto);
+    if (numero === null) {
       setValorLocal(String(valor));
       return;
     }
+    setValorLocal(String(numero));
     await guardarValor(numero).catch(() => {});
   }
 
