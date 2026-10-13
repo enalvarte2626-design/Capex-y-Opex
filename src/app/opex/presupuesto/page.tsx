@@ -181,6 +181,38 @@ export default function PresupuestoOpex() {
     }
   }
 
+  /** Reabre el último mes cerrado (retrocede el marcador un paso) — ej. si Septiembre
+   *  está cerrado, lo reabre y deja cerrado Agosto. De ahí en adelante una factura nueva
+   *  de ese mes vuelve a sumar directo al Gasto Real al registrarla, igual que antes de
+   *  haberlo cerrado. Solo retrocede un mes a la vez, el inmediato anterior. */
+  async function reabrirMesActual() {
+    if (mesCierreServidor == null || mesCierreServidor <= 0) return;
+    const nombreMesActual = NOMBRES_MES_CIERRE[mesCierreServidor - 1];
+    const confirmado = window.confirm(
+      `¿Reabrir ${nombreMesActual}? Las facturas nuevas que se registren para ${nombreMesActual} van a volver a sumar directo al Gasto Real de Presupuesto ${anio} al registrarlas.`
+    );
+    if (!confirmado) return;
+
+    setCerrandoMes(true);
+    setMensajeCierre(null);
+    try {
+      const res = await fetch("/api/opex/mes-cierre", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mes: mesCierreServidor - 1 }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo reabrir el mes.");
+      setMesCierreServidor(json.mesCierre);
+      setMesCierre(json.mesCierre);
+      setMensajeCierre({ tipo: "ok", texto: `${nombreMesActual} reabierto.` });
+    } catch (e) {
+      setMensajeCierre({ tipo: "error", texto: (e as Error).message });
+    } finally {
+      setCerrandoMes(false);
+    }
+  }
+
   function actualizarLocal(fila: number, cambios: Partial<ProyectoCapex>) {
     setLineas((prev) => prev?.map((x) => (x.filaExcel === fila ? { ...x, ...cambios } : x)) ?? prev);
   }
@@ -418,26 +450,41 @@ export default function PresupuestoOpex() {
             ))}
           </select>
         </div>
-        {puedeEditar && mesCierreServidor != null && mesCierreServidor < 12 && (
+        {puedeEditar && mesCierreServidor != null && (
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={generarArchivoDeCierre}
-              disabled={generandoArchivo}
-              title="Crea un archivo nuevo en SharePoint para el siguiente mes, igual que en CAPEX — el archivo actual no se modifica"
-            >
-              {generandoArchivo ? "Generando…" : "Generar archivo de cierre"}
-            </button>
-            <button
-              type="button"
-              className="boton-secundario"
-              onClick={cerrarMesSiguiente}
-              disabled={cerrandoMes}
-              title="Cierra el gasto de ese mes de verdad — de ahí en adelante, las facturas nuevas de ese mes suman solas al presupuesto"
-            >
-              {cerrandoMes ? "Cerrando…" : `Cerrar ${NOMBRES_MES_CIERRE[mesCierreServidor]}`}
-            </button>
+            {mesCierreServidor < 12 && (
+              <button
+                type="button"
+                className="boton-secundario"
+                onClick={generarArchivoDeCierre}
+                disabled={generandoArchivo}
+                title="Crea un archivo nuevo en SharePoint para el siguiente mes, igual que en CAPEX — el archivo actual no se modifica"
+              >
+                {generandoArchivo ? "Generando…" : "Generar archivo de cierre"}
+              </button>
+            )}
+            {mesCierreServidor < 12 && (
+              <button
+                type="button"
+                className="boton-secundario"
+                onClick={cerrarMesSiguiente}
+                disabled={cerrandoMes}
+                title="Cierra el gasto de ese mes de verdad — de ahí en adelante, las facturas nuevas de ese mes suman solas al presupuesto"
+              >
+                {cerrandoMes ? "Cerrando…" : `Cerrar ${NOMBRES_MES_CIERRE[mesCierreServidor]}`}
+              </button>
+            )}
+            {mesCierreServidor > 0 && (
+              <button
+                type="button"
+                className="boton-secundario"
+                onClick={reabrirMesActual}
+                disabled={cerrandoMes}
+                title="Reabre el último mes cerrado — las facturas nuevas de ese mes vuelven a sumar directo al Gasto Real al registrarlas"
+              >
+                {cerrandoMes ? "Guardando…" : `Reabrir ${NOMBRES_MES_CIERRE[mesCierreServidor - 1]}`}
+              </button>
+            )}
             {mensajeCierre && (
               <span
                 className="text-xs"

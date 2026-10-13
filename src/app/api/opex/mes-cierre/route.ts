@@ -23,9 +23,10 @@ export async function GET() {
 }
 
 /**
- * Cierra un mes más — solo se puede AVANZAR (nunca reabrir uno ya cerrado desde acá), y
- * solo de a un mes a la vez, para que no se salte un mes por error: cerrar Agosto exige
- * que el mes de cierre actual sea Julio.
+ * Mueve el mes de cierre un paso — hacia adelante (cerrar) o hacia atrás (reabrir el
+ * último mes cerrado), siempre de a un mes a la vez para que no se salte ninguno por
+ * error: cerrar Agosto exige que el mes de cierre actual sea Julio; reabrir Agosto exige
+ * que el mes de cierre actual sea, justamente, Agosto.
  */
 export async function POST(request: Request) {
   const config = obtenerConfiguracionOpex();
@@ -36,13 +37,25 @@ export async function POST(request: Request) {
 
   const cuerpo = await request.json().catch(() => null);
   const mesNuevo = Number(cuerpo?.mes);
-  if (!Number.isInteger(mesNuevo) || mesNuevo < 1 || mesNuevo > 12) {
+  if (!Number.isInteger(mesNuevo) || mesNuevo < 0 || mesNuevo > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
     const mesCierreActual = await leerMesCierre(config, archivo);
+
+    if (mesNuevo === mesCierreActual - 1) {
+      // Reabrir: retrocede exactamente el último mes cerrado, nunca más de uno de un
+      // salto. De acá en adelante una factura nueva de ese mes vuelve a sumar al Gasto
+      // Real al registrarla — tal como era antes de haberlo cerrado.
+      await escribirMesCierre(config, archivo, mesNuevo);
+      return NextResponse.json({
+        ok: true,
+        mesCierre: mesNuevo,
+        nombreMesCierre: mesNuevo > 0 ? NOMBRES_MES_CIERRE[mesNuevo - 1] : null,
+      });
+    }
 
     if (mesNuevo <= mesCierreActual) {
       return NextResponse.json(
