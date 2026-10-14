@@ -13,6 +13,10 @@
   --exito: #107c10;
   --alerta: #d83b01;
   --peligro: #a4262c;
+  /* Resalta el Gasto Real de los meses ya cerrados en el detalle mensual (BD_CAPEX y
+     Presupuesto OPEX) — para distinguirlo a simple vista del Proyectado y de los meses
+     que todavía están abiertos. */
+  --cerrado-suave: #fdf0dc;
 }
 
 @theme inline {

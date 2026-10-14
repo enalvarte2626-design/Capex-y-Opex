@@ -628,9 +628,13 @@ export default function PresupuestoOpex() {
                       <th
                         key={`${m.mi}-${s}`}
                         className="py-1 px-3 text-center font-normal text-xs"
-                        style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined }}
+                        style={{
+                          borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
+                          background: s === "real" && m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                        }}
                       >
                         {s === "real" ? "Real" : "Proy."}
+                        {s === "real" && m.mi < mesCierre ? " 🔒" : ""}
                       </th>
                     ))
                   )}
@@ -753,7 +757,10 @@ export default function PresupuestoOpex() {
                         <td
                           key={`${m.mi}-${s}`}
                           className="py-1.5 px-3 overflow-hidden"
-                          style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined }}
+                          style={{
+                            borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
+                            background: s === "real" && m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                          }}
                         >
                           {s === "real" && m.mi < mesCierre ? (
                             <span
@@ -840,7 +847,10 @@ export default function PresupuestoOpex() {
                       <td
                         key={`total-${m.mi}-${s}`}
                         className="py-2 px-3 text-center text-xs font-bold whitespace-nowrap"
-                        style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined, background: "var(--bg)" }}
+                        style={{
+                          borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
+                          background: s === "real" && m.mi < mesCierre ? "var(--cerrado-suave)" : "var(--bg)",
+                        }}
                       >
                         {moneda2(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado)}
                         {mostrarSoles && (

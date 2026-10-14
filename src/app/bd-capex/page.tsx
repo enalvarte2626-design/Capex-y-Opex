@@ -727,9 +727,18 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
                       key={m.mi}
                       colSpan={m.subcolumnas.length}
                       className="py-1 px-3 text-center font-semibold whitespace-nowrap"
-                      style={{ borderLeft: "1px solid var(--borde)" }}
+                      style={{
+                        borderLeft: "1px solid var(--borde)",
+                        background: m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                      }}
                     >
                       {m.nombre}
+                      {m.mi < mesCierre && (
+                        <span className="font-normal" style={{ color: "var(--texto-suave)" }} title="Mes cerrado">
+                          {" "}
+                          🔒
+                        </span>
+                      )}
                     </th>
                   ))}
               </tr>
@@ -740,7 +749,10 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
                       <th
                         key={`${m.mi}-${s}`}
                         className="py-1 px-3 text-center font-normal text-xs"
-                        style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined }}
+                        style={{
+                          borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
+                          background: m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                        }}
                       >
                         {s === "real" ? "Real" : "Proy."}
                       </th>
@@ -889,7 +901,10 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
                           <td
                             key={`${m.mi}-${s}`}
                             className="py-1.5 px-3"
-                            style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined }}
+                            style={{
+                              borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
+                              background: m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                            }}
                           >
                             {s === "real" && m.mi < mesCierre ? (
                               // Mes ya cerrado: el Real queda fijo, no se edita más.
@@ -979,7 +994,10 @@ async function escribirCampoCapex(fila: number, campo: string, valor: number | s
                       <td
                         key={`total-${m.mi}-${s}`}
                         className="py-2 px-3 text-center text-xs font-bold whitespace-nowrap"
-                        style={{ borderLeft: s === "real" ? "1px solid var(--borde)" : undefined, background: "var(--bg)" }}
+                        style={{
+                          borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
+                          background: m.mi < mesCierre ? "var(--cerrado-suave)" : "var(--bg)",
+                        }}
                       >
                         {moneda2(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado)}
                         {mostrarSoles && (
