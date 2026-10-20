@@ -557,11 +557,6 @@ export default function Facturas() {
             />
           </div>
           <div>
-            <label className="etiqueta">RUC (opcional, solo proveedores peruanos)</label>
-            <input type="text" className="campo" value={form.ruc} onChange={(e) => actualizarCampo("ruc", e.target.value)} />
-          </div>
-
-          <div>
             <label className="etiqueta">Proveedor</label>
             <input
               type="text"
@@ -577,6 +572,16 @@ export default function Facturas() {
               ))}
             </datalist>
           </div>
+          <div>
+            <label className="etiqueta">RUC (opcional, solo proveedores peruanos)</label>
+            <input type="text" className="campo" value={form.ruc} onChange={(e) => actualizarCampo("ruc", e.target.value)} />
+            {form.recurso && rucPorProveedor.get(claveNormalizada(form.recurso)) && (
+              <p className="text-xs mt-0.5" style={{ color: "var(--texto-suave)" }}>
+                Autocompletado del último registro de {form.recurso}.
+              </p>
+            )}
+          </div>
+
           <div>
             <label className="etiqueta">Empresa (código)</label>
             <input type="text" className="campo" value={form.proveedor} onChange={(e) => actualizarCampo("proveedor", e.target.value)} />
