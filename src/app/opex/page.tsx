@@ -14,7 +14,6 @@ import {
 } from "recharts";
 import {
   NOMBRES_MES,
-  NOMBRES_MES_CIERRE,
   gastoPorGrupoNegocio,
   mesesATrimestres,
   mesesConForecast,
@@ -26,7 +25,7 @@ import {
   type ProyectoCapex,
   type ProyectoResuelto,
 } from "@/lib/capex";
-import { useMesCierre } from "@/lib/useMesCierre";
+import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import { useTipoCambio } from "@/lib/useTipoCambio";
 import { usePersistedState } from "@/lib/usePersistedState";
 import { moneda, moneda2, soles, solesK } from "@/lib/format";
@@ -87,9 +86,23 @@ export default function DashboardOpex() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gruposSel, setGruposSel] = usePersistedState<string[] | null>("opex-dashboard-gruposSel", null);
-  const [mesCierre, setMesCierre] = useMesCierre();
+  // Mes de cierre REAL guardado en el Excel (hoja "Config App") — ya no es un selector
+  // manual: el Dashboard siempre refleja el mismo cierre que "Cerrar mes"/"Reabrir mes"
+  // en Presupuesto OPEX, sin que nadie tenga que elegirlo acá.
+  const [mesCierre, setMesCierre] = useState<number>(MES_CIERRE_POR_DEFECTO);
   const [mostrarSoles, setMostrarSoles] = usePersistedState("opex-dashboard-mostrarSoles", false);
   const [tipoCambio, setTipoCambio] = useTipoCambio();
+
+  useEffect(() => {
+    fetch("/api/opex/mes-cierre", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (Number.isInteger(j?.mesCierre)) setMesCierre(j.mesCierre);
+      })
+      .catch(() => {
+        /* si falla, se queda con MES_CIERRE_POR_DEFECTO */
+      });
+  }, []);
 
   async function cargar() {
     setCargando(true);
@@ -188,22 +201,6 @@ export default function DashboardOpex() {
               Quitar filtros ✕
             </button>
           )}
-          <div className="flex items-center gap-2">
-            <span className="etiqueta mb-0">Mes de cierre:</span>
-            <select
-              className="campo"
-              style={{ width: "auto" }}
-              value={mesCierre}
-              onChange={(e) => setMesCierre(Number(e.target.value))}
-              title="Último mes con Gasto Real cerrado — de ahí en adelante se cuenta como Forecast. No cambia el Excel, solo cómo se ve aquí."
-            >
-              {NOMBRES_MES_CIERRE.map((nombre, i) => (
-                <option key={nombre} value={i + 1}>
-                  {nombre}
-                </option>
-              ))}
-            </select>
-          </div>
           <span
             className="chip"
             data-activo={mostrarSoles}
