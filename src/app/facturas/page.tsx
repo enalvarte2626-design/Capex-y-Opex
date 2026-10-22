@@ -660,19 +660,19 @@ export default function Facturas() {
             " Todos los campos de la tabla de abajo son editables directo — se guardan al salir del campo. Cambiar el Mes solo corrige la etiqueta de esta factura, no vuelve a sumar ni restar del presupuesto. El Monto solo se puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale de solo lectura, con una nota)."}
         </p>
         <div className="overflow-x-auto p-4">
-          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1400 }}>
+          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1630 }}>
             <colgroup>
               <col style={{ width: 110 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 100 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 160 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 150 }} />
               <col style={{ width: 240 }} />
               <col style={{ width: 110 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 140 }} />
               <col style={{ width: 110 }} />
-              <col style={{ width: 220 }} />
+              <col style={{ width: 270 }} />
             </colgroup>
             <thead>
               <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
@@ -710,6 +710,7 @@ export default function Facturas() {
                       valor={f.recurso}
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { recurso: String(v) })}
                     />
                   </td>
@@ -721,6 +722,7 @@ export default function Facturas() {
                       valor={f.proveedor}
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { proveedor: String(v) })}
                     />
                   </td>
@@ -732,6 +734,7 @@ export default function Facturas() {
                       valor={f.responsable}
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { responsable: String(v) })}
                     />
                   </td>
@@ -774,6 +777,7 @@ export default function Facturas() {
                       valor={f.numeroFactura}
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { numeroFactura: String(v) })}
                     />
                   </td>
@@ -785,6 +789,7 @@ export default function Facturas() {
                       valor={f.ruc}
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { ruc: String(v) })}
                     />
                   </td>
@@ -796,6 +801,7 @@ export default function Facturas() {
                       valor={f.comentarios}
                       endpoint="/api/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { comentarios: String(v) })}
                     />
                   </td>

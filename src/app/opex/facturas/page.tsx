@@ -501,20 +501,20 @@ export default function FacturasOpex() {
           abajo muestra las más recientes primero.
         </p>
         <div className="overflow-x-auto p-4">
-          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1610 }}>
+          <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1730 }}>
             <colgroup>
               <col style={{ width: 100 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 140 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 150 }} />
               <col style={{ width: 220 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 160 }} />
               <col style={{ width: 110 }} />
               <col style={{ width: 110 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 150 }} />
               <col style={{ width: 110 }} />
-              <col style={{ width: 200 }} />
+              <col style={{ width: 250 }} />
             </colgroup>
             <thead>
               <tr className="text-left" style={{ color: "var(--texto-suave)" }}>
@@ -561,6 +561,7 @@ export default function FacturasOpex() {
                       valor={f.proveedor}
                       endpoint="/api/opex/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { proveedor: String(v) })}
                     />
                   </td>
@@ -600,6 +601,7 @@ export default function FacturasOpex() {
                       valor={f.numeroComprobante}
                       endpoint="/api/opex/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { numeroComprobante: String(v) })}
                     />
                   </td>
@@ -611,6 +613,7 @@ export default function FacturasOpex() {
                       valor={f.ruc}
                       endpoint="/api/opex/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { ruc: String(v) })}
                     />
                   </td>
@@ -622,6 +625,7 @@ export default function FacturasOpex() {
                       valor={f.comentario}
                       endpoint="/api/opex/facturas/editar-campo"
                       soloLectura={!puedeEditar}
+                      className="text-xs"
                       onGuardado={(v) => actualizarFacturaLocal(f.filaExcel, { comentario: String(v) })}
                     />
                   </td>
