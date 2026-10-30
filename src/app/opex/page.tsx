@@ -34,12 +34,17 @@ import FiltroMultiple from "@/components/FiltroMultiple";
 import MontoSoles from "@/components/MontoSoles";
 import { useAnios } from "@/components/AnioProvider";
 
-const COLORES = ["#c8102e", "#0f6cbd", "#107c10", "#d83b01", "#5c2d91", "#008272", "#986f0b", "#e3008c"];
+// Rojo corporativo (Pantone 186 C) primero, seguido de una escala de grises — reemplaza
+// la paleta de 8 colores del template compartido. Con más de 2-3 Grupos de Gasto en
+// pantalla a la vez, los grises intermedios se distinguen menos entre sí a simple vista
+// que una paleta multicolor; si eso complica leer el gráfico con muchos grupos, se puede
+// sumar algún tono más adelante sin tocar nada más.
+const COLORES = ["#c8102e", "#484644", "#970c22", "#8a8785", "#e0778a", "#c8c6c4", "#201f1e", "#605e5c"];
 
-/** Mismos tonos que CAPEX (template "Dashboard TI"): azul para lo normal/informativo,
- *  rosa/magenta para lo crítico — en vez de rojo/naranja/verde por separado. */
-const AZUL_TEMPLATE = "#0f6cbd";
-const ROSA_TEMPLATE = "#d6246e";
+/** Mismos tonos que CAPEX: rojo corporativo (Pantone 186 C) para lo crítico, gris neutro
+ *  para lo normal/informativo — en vez del azul/rosa del template compartido. */
+const GRIS_TEMPLATE = "#484644";
+const ROSA_TEMPLATE = "#970c22";
 
 // Anchos fijos de las tablas "Panorama" — mismo criterio que ya usa Presupuesto OPEX
 // (table-layout:fixed + colgroup): sin esto, la tabla se estira a lo ancho de la card y
@@ -55,11 +60,11 @@ const ANCHO_COL_MES_PANORAMA = 90;
 function estadoEjecucion(pct: number): { texto: string; bg: string; color: string } {
   // 100.05: exactamente en el presupuesto (Diferencia = 0) puede llegar como 100.000001%
   // por ruido de redondeo de floats — eso no es "sobrepasado", es justo en el límite.
-  if (pct > 150) return { texto: "Muy sobrepasado", bg: "#fbe1ec", color: ROSA_TEMPLATE };
-  if (pct > 100.05) return { texto: "Sobrepasado", bg: "#fbe1ec", color: ROSA_TEMPLATE };
-  if (pct >= 100) return { texto: "Ejecutado", bg: "#dceafa", color: AZUL_TEMPLATE };
-  if (pct >= 80) return { texto: "Por agotarse", bg: "#dceafa", color: AZUL_TEMPLATE };
-  return { texto: "En curso", bg: "#e3edfa", color: AZUL_TEMPLATE };
+  if (pct > 150) return { texto: "Muy sobrepasado", bg: "#fbe7ea", color: ROSA_TEMPLATE };
+  if (pct > 100.05) return { texto: "Sobrepasado", bg: "#fbe7ea", color: ROSA_TEMPLATE };
+  if (pct >= 100) return { texto: "Ejecutado", bg: "#f3f2f1", color: GRIS_TEMPLATE };
+  if (pct >= 80) return { texto: "Por agotarse", bg: "#f3f2f1", color: GRIS_TEMPLATE };
+  return { texto: "En curso", bg: "#f3f2f1", color: GRIS_TEMPLATE };
 }
 
 function EtiquetaEjecucion({ pct }: { pct: number }) {
@@ -230,7 +235,7 @@ export default function DashboardOpex() {
         <TarjetaKpi
           titulo="Diferencia"
           valor={totales.diferencia}
-          color={totales.diferencia < 0 ? ROSA_TEMPLATE : AZUL_TEMPLATE}
+          color={totales.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE}
           mostrarSoles={mostrarSoles}
           tipoCambio={tipoCambio}
         />
@@ -251,14 +256,14 @@ export default function DashboardOpex() {
             <Legend />
             {/* fill del <Bar> = lo que muestra la Leyenda (un color fijo por serie); el
                 color real de cada barra lo pone el <Cell> de abajo, por grupo. */}
-            <Bar dataKey="gastoReal" name="Gasto real" stackId="a" fill={AZUL_TEMPLATE}>
+            <Bar dataKey="gastoReal" name="Gasto real" stackId="a" fill={GRIS_TEMPLATE}>
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill={colorPorGrupo[g.grupoNegocio] ?? AZUL_TEMPLATE} />
+                <Cell key={g.grupoNegocio} fill={colorPorGrupo[g.grupoNegocio] ?? GRIS_TEMPLATE} />
               ))}
             </Bar>
-            <Bar dataKey="forecast" name="Forecast" stackId="a" fill="#a9cdea" fillOpacity={0.45}>
+            <Bar dataKey="forecast" name="Forecast" stackId="a" fill="#e0778a" fillOpacity={0.45}>
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill={colorPorGrupo[g.grupoNegocio] ?? AZUL_TEMPLATE} />
+                <Cell key={g.grupoNegocio} fill={colorPorGrupo[g.grupoNegocio] ?? GRIS_TEMPLATE} />
               ))}
             </Bar>
             <Bar dataKey="presupuestoAprobado" name="Presupuesto aprobado" fill="#c8c6c4">
@@ -449,7 +454,7 @@ function TablaLineasOpex({
                 </td>
                 <td
                   className="py-1.5 px-3 text-right whitespace-nowrap font-medium"
-                  style={{ color: g.diferencia < 0 ? ROSA_TEMPLATE : AZUL_TEMPLATE }}
+                  style={{ color: g.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE }}
                 >
                   {moneda2(g.diferencia)}
                   <MontoSoles valorUsd={g.diferencia} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="text-xs" />
@@ -551,7 +556,7 @@ function TablaLineasOpex({
                     </td>
                     <td
                       className="py-1.5 px-3 text-right whitespace-nowrap font-bold"
-                      style={{ color: l.diferencia < 0 ? ROSA_TEMPLATE : AZUL_TEMPLATE }}
+                      style={{ color: l.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE }}
                     >
                       {moneda2(l.diferencia)}
                       <MontoSoles valorUsd={l.diferencia} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="text-xs" />
@@ -595,7 +600,7 @@ function AdvertenciasDatosSection({ filtradas }: { filtradas: ReturnType<typeof 
   if (conAdvertencias.length === 0) return null;
 
   return (
-    <div className="card p-4" style={{ background: "#fbe1ec", border: `1px solid ${ROSA_TEMPLATE}` }}>
+    <div className="card p-4" style={{ background: "#fbe7ea", border: `1px solid ${ROSA_TEMPLATE}` }}>
       <button type="button" className="flex items-center gap-3 w-full text-left" onClick={() => setAbierto(true)}>
         <span className="text-2xl font-bold" style={{ color: ROSA_TEMPLATE }}>
           ⚠ {conAdvertencias.length}
@@ -703,7 +708,7 @@ function ForecastPorGrupoOpexSection({
             }}
             title={g.items.length > 0 ? "Toca para ver el detalle" : undefined}
           >
-            <p className="text-lg font-bold leading-tight" style={{ color: AZUL_TEMPLATE }}>
+            <p className="text-lg font-bold leading-tight" style={{ color: GRIS_TEMPLATE }}>
               {moneda2(g.totalForecast)}
             </p>
             <p className="text-xs font-semibold truncate">
@@ -763,7 +768,7 @@ function ForecastPorGrupoOpexSection({
                           {esLaMasAlta && (
                             <span
                               className="ml-2 text-xs font-semibold rounded-full px-2 py-0.5"
-                              style={{ background: "#fbe1ec", color: ROSA_TEMPLATE }}
+                              style={{ background: "#fbe7ea", color: ROSA_TEMPLATE }}
                             >
                               más alta
                             </span>
@@ -780,7 +785,7 @@ function ForecastPorGrupoOpexSection({
                         <td className="py-1.5 pr-4 whitespace-nowrap" style={{ color: "var(--texto-suave)" }}>
                           {meses}
                         </td>
-                        <td className="py-1.5 px-3 text-right font-bold" style={{ color: AZUL_TEMPLATE }}>
+                        <td className="py-1.5 px-3 text-right font-bold" style={{ color: GRIS_TEMPLATE }}>
                           {moneda2(l.forecast)}
                           <MontoSoles valorUsd={l.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
                         </td>
@@ -793,7 +798,7 @@ function ForecastPorGrupoOpexSection({
                     <td className="py-2 pr-4 font-bold" colSpan={4}>
                       Total
                     </td>
-                    <td className="py-2 px-3 text-right font-bold" style={{ color: AZUL_TEMPLATE }}>
+                    <td className="py-2 px-3 text-right font-bold" style={{ color: GRIS_TEMPLATE }}>
                       {moneda2(grupoModal.totalForecast)}
                       <MontoSoles valorUsd={grupoModal.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
                     </td>
@@ -853,7 +858,7 @@ function LineasSinGastoSection({
         disabled={sinGasto.length === 0}
         className="rounded-lg p-3 text-left"
         style={{
-          background: sinGasto.length > 0 ? "#fbe1ec" : "var(--bg)",
+          background: sinGasto.length > 0 ? "#fbe7ea" : "var(--bg)",
           cursor: sinGasto.length > 0 ? "pointer" : "default",
         }}
         title={sinGasto.length > 0 ? "Toca para ver el detalle" : undefined}
@@ -989,8 +994,8 @@ function construirColumnas(mesCierre: number | undefined, trimestresAbiertos: Se
 /** Fondo tenue para marcar de un vistazo qué trimestre/mes ya es historia (cerrado) o está
  *  a mitad de camino (parcial) — mismo criterio que Panorama Actual en CAPEX. */
 function fondoCierre(estado: "cerrado" | "parcial" | undefined): string | undefined {
-  if (estado === "cerrado") return "#e3edfa";
-  if (estado === "parcial") return "#cfe0f3";
+  if (estado === "cerrado") return "#f3f2f1";
+  if (estado === "parcial") return "#e1dfdd";
   return undefined;
 }
 

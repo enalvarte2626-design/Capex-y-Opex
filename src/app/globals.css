@@ -6,10 +6,27 @@
   --texto: #201f1e;
   --texto-suave: #605e5c;
   --borde: #e1dfdd;
-  /* Rojo corporativo Expertia */
+
+  /* Rojo corporativo (Pantone 186 C) — un solo rojo de marca, en distintos tonos. */
   --acento: #c8102e;
   --acento-fuerte: #970c22;
   --acento-suave: #fbe7ea;
+  /* Tono intermedio del rojo de marca — para una segunda serie en gráficos de 2 series
+     (ej. Presupuesto vs. Forecast) sin salirse de la paleta roja. */
+  --acento-medio: #e0778a;
+
+  /* Escala de grises (gama neutra, acompaña al rojo en vez de competir con él) — mismos
+     grises que ya usaba la app (bg/texto/texto-suave/borde), más algunos pasos
+     intermedios para gráficos y estados "neutros". */
+  --gris-900: #201f1e; /* = --texto */
+  --gris-700: #484644;
+  --gris-500: #605e5c; /* = --texto-suave */
+  --gris-400: #8a8785;
+  --gris-300: #c8c6c4;
+  --gris-200: #e1dfdd; /* = --borde */
+  --gris-100: #f3f2f1;
+  --gris-50: #faf9f8; /* = --bg */
+
   --exito: #107c10;
   --alerta: #d83b01;
   --peligro: #a4262c;

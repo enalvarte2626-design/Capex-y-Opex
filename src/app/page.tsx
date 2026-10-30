@@ -50,38 +50,39 @@ const ANCHO_COL_TOTAL_PANORAMA = 100;
 const ANCHO_COL_TRIMESTRE = 105;
 const ANCHO_COL_MES_PANORAMA = 90;
 
-// Paleta de las barras: tonos de azul (el mismo azul del template, en distintas
-// intensidades) en vez de negro/gris — el rojo/rosa queda reservado para lo crítico
-// (gasto por encima de lo planeado/aprobado), no para diferenciar categorías.
+// Paleta de las barras: rojo corporativo (Pantone 186 C) para el grupo principal y una
+// escala de grises para el resto — en vez del azul del template compartido. El rojo
+// queda reservado para EMISIVO (el grupo de mayor peso); RECEPTIVO y TRANSVERSAL usan
+// grises, así ningún otro grupo compite con el rojo de marca.
 const COLOR_GRUPO: Record<string, string> = {
-  EMISIVO: "#0f6cbd",
-  RECEPTIVO: "#4a97d9",
-  TRANSVERSAL: "#a9cdea",
+  EMISIVO: "#c8102e",
+  RECEPTIVO: "#484644",
+  TRANSVERSAL: "#8a8785",
 };
 /** Versión más clara de COLOR_GRUPO, para el segmento "Forecast" de las barras apiladas —
  *  mismo tono que el grupo, para poder diferenciar un grupo de otro de un vistazo. */
 const COLOR_GRUPO_CLARO: Record<string, string> = {
-  EMISIVO: "#4a97d9",
-  RECEPTIVO: "#a9cdea",
-  TRANSVERSAL: "#d4e6f4",
+  EMISIVO: "#e0778a",
+  RECEPTIVO: "#8a8785",
+  TRANSVERSAL: "#c8c6c4",
 };
 
-const COLORES_TRIMESTRE = ["#0f6cbd", "#4a97d9", "#8fc0ea", "#c3ddf3"];
+const COLORES_TRIMESTRE = ["#c8102e", "#e0778a", "#8a8785", "#c8c6c4"];
 
-/** Tonos tomados del template de diseño "Dashboard TI" compartido: azul para lo normal/
- *  informativo, rosa/magenta para lo crítico — en vez de rojo corporativo + gris neutro. */
-const AZUL_TEMPLATE = "#0f6cbd";
-const ROSA_TEMPLATE = "#d6246e";
+/** Rojo corporativo (Pantone 186 C) para lo crítico, gris neutro para lo normal/
+ *  informativo — reemplaza el azul/rosa del template de diseño "Dashboard TI" compartido. */
+const GRIS_TEMPLATE = "#484644";
+const ROSA_TEMPLATE = "#970c22";
 
 /** Cartel en lenguaje simple junto al % de desviación — para no tener que interpretar el
  *  número solo por el color. */
 // Cualquier valor positivo (por chico que sea) es gasto por encima de lo planeado — no
-// hay "margen razonable" para eso, siempre se marca en rosa. Azul para todo lo demás.
+// hay "margen razonable" para eso, siempre se marca en rojo. Gris para todo lo demás.
 function estadoDesviacion(pct: number): { texto: string; bg: string; color: string } {
-  if (pct > 20) return { texto: "Muy por encima de lo planeado", bg: "#fbe1ec", color: ROSA_TEMPLATE };
-  if (pct > 0) return { texto: "Por encima de lo planeado", bg: "#fbe1ec", color: ROSA_TEMPLATE };
-  if (pct < 0) return { texto: "Por debajo de lo planeado", bg: "#e3edfa", color: AZUL_TEMPLATE };
-  return { texto: "Alineado a lo planeado", bg: "#e3edfa", color: AZUL_TEMPLATE };
+  if (pct > 20) return { texto: "Muy por encima de lo planeado", bg: "#fbe7ea", color: ROSA_TEMPLATE };
+  if (pct > 0) return { texto: "Por encima de lo planeado", bg: "#fbe7ea", color: ROSA_TEMPLATE };
+  if (pct < 0) return { texto: "Por debajo de lo planeado", bg: "#f3f2f1", color: GRIS_TEMPLATE };
+  return { texto: "Alineado a lo planeado", bg: "#f3f2f1", color: GRIS_TEMPLATE };
 }
 
 function CartelDesviacion({ pct }: { pct: number }) {
@@ -447,7 +448,7 @@ export default function DashboardCapex() {
         <TarjetaKpi
           titulo="Diferencia"
           valor={totales.diferencia}
-          color={totales.diferencia < 0 ? ROSA_TEMPLATE : AZUL_TEMPLATE}
+          color={totales.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE}
           mostrarSoles={mostrarSoles}
           tipoCambio={tipoCambio}
         />
@@ -468,14 +469,14 @@ export default function DashboardCapex() {
             <Legend />
             {/* El "fill" del Bar es solo lo que usa la leyenda como muestra de color — el
                 color real de cada barra lo pone el <Cell> de abajo, por grupo. */}
-            <Bar dataKey="gastoReal" name="Gasto real" stackId="a" fill={AZUL_TEMPLATE}>
+            <Bar dataKey="gastoReal" name="Gasto real" stackId="a" fill={GRIS_TEMPLATE}>
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill={COLOR_GRUPO[g.grupoNegocio] ?? AZUL_TEMPLATE} />
+                <Cell key={g.grupoNegocio} fill={COLOR_GRUPO[g.grupoNegocio] ?? GRIS_TEMPLATE} />
               ))}
             </Bar>
-            <Bar dataKey="forecast" name="Forecast" stackId="a" fill="#a9cdea">
+            <Bar dataKey="forecast" name="Forecast" stackId="a" fill="#e0778a">
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill={COLOR_GRUPO_CLARO[g.grupoNegocio] ?? "#a9cdea"} />
+                <Cell key={g.grupoNegocio} fill={COLOR_GRUPO_CLARO[g.grupoNegocio] ?? "#e0778a"} />
               ))}
             </Bar>
             <Bar dataKey="presupuestoAprobado" name="Presupuesto aprobado" fill="#c8c6c4">
@@ -527,7 +528,7 @@ export default function DashboardCapex() {
                     <td className="pt-1 font-semibold">= Diferencia</td>
                     <td
                       className="pt-1 text-right font-bold"
-                      style={{ color: g.diferencia < 0 ? ROSA_TEMPLATE : AZUL_TEMPLATE }}
+                      style={{ color: g.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE }}
                     >
                       {moneda(g.diferencia)}
                       <MontoSoles valorUsd={g.diferencia} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} />
@@ -600,7 +601,7 @@ function AdvertenciasDatosSection({ proyectos }: { proyectos: ProyectoResuelto[]
   if (conAdvertencias.length === 0) return null;
 
   return (
-    <div className="card p-4" style={{ background: "#fbe1ec", border: `1px solid ${ROSA_TEMPLATE}` }}>
+    <div className="card p-4" style={{ background: "#fbe7ea", border: `1px solid ${ROSA_TEMPLATE}` }}>
       <button type="button" className="flex items-center gap-3 w-full text-left" onClick={() => setAbierto(true)}>
         <span className="text-2xl font-bold" style={{ color: ROSA_TEMPLATE }}>
           ⚠ {conAdvertencias.length}
@@ -967,7 +968,7 @@ function ProyectosSobrepasadosSection({
               disabled={g.items.length === 0}
               className="rounded-lg p-3 text-left"
               style={{
-                background: "#fbe1ec",
+                background: "#fbe7ea",
                 cursor: g.items.length === 0 ? "default" : "pointer",
                 opacity: g.items.length === 0 ? 0.5 : 1,
               }}
@@ -1410,14 +1411,14 @@ function ProyectosCorridosSection({
             <ResumenAlerta
               cantidad={confirmados.length}
               etiqueta="Se corrieron y se ejecutaron"
-              bg="#e3edfa"
-              color={AZUL_TEMPLATE}
+              bg="#f3f2f1"
+              color={GRIS_TEMPLATE}
               onClick={() => setDetalleTipo("corrido_confirmado")}
             />
             <ResumenAlerta
               cantidad={sinConfirmar.length}
               etiqueta="En otro trimestre ya cerrado, sin ejecutar"
-              bg="#fbe1ec"
+              bg="#fbe7ea"
               color={ROSA_TEMPLATE}
               onClick={() => setDetalleTipo("corrido_sin_confirmar")}
             />
@@ -1431,7 +1432,7 @@ function ProyectosCorridosSection({
             <ResumenAlerta
               cantidad={noEjecutados.length}
               etiqueta="No se ejecutaron en ningún trimestre"
-              bg="#fbe1ec"
+              bg="#fbe7ea"
               color={ROSA_TEMPLATE}
               onClick={() => setDetalleTipo("no_ejecutado")}
             />
@@ -1577,10 +1578,10 @@ function ModalDetalleAlertas({
                       className="inline-block rounded-full text-xs font-semibold px-2 py-0.5 whitespace-nowrap"
                       style={
                         a.tipo === "no_ejecutado" || a.tipo === "corrido_sin_confirmar"
-                          ? { background: "#fbe1ec", color: ROSA_TEMPLATE }
+                          ? { background: "#fbe7ea", color: ROSA_TEMPLATE }
                           : a.tipo === "pendiente_futuro"
                             ? { background: "#f3f2f1", color: "var(--texto-suave)" }
-                            : { background: "#e3edfa", color: AZUL_TEMPLATE }
+                            : { background: "#f3f2f1", color: GRIS_TEMPLATE }
                       }
                     >
                       {a.tipo === "corrido_confirmado"
@@ -1718,8 +1719,8 @@ function construirColumnas(
 /** Fondo tenue para marcar de un vistazo qué trimestre/mes ya es historia (cerrado) o
  *  está a mitad de camino (parcial) — mismo criterio en Panorama Proyectado y Actual. */
 function fondoCierre(estado: "cerrado" | "parcial" | undefined): string | undefined {
-  if (estado === "cerrado") return "#e3edfa";
-  if (estado === "parcial") return "#cfe0f3";
+  if (estado === "cerrado") return "#f3f2f1";
+  if (estado === "parcial") return "#e1dfdd";
   return undefined;
 }
 
