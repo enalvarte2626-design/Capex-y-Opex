@@ -115,6 +115,14 @@ export default function PresupuestoOpex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Para decidir si un mes está REALMENTE cerrado (candado, fondo resaltado, Real de solo
+  // lectura) siempre hay que usar el marcador real del servidor, nunca `mesCierre` — ese
+  // es el selector "Ver como si el cierre fuera", una preferencia de vista que se guarda
+  // en el navegador y es la MISMA en toda la app (CAPEX y OPEX comparten la clave de
+  // localStorage) — si alguien la dejó en otro mes en cualquier otra pantalla, no debe
+  // bloquear ni marcar como cerrado un mes que en el Excel sigue abierto.
+  const mesCierreReal = mesCierreServidor ?? mesCierre;
+
   const [generandoArchivo, setGenerandoArchivo] = useState(false);
 
   /** Genera el archivo del siguiente cierre (ej. "...8+4.xlsx" → "...9+3.xlsx") como una
@@ -630,11 +638,11 @@ export default function PresupuestoOpex() {
                         className="py-1 px-3 text-center font-normal text-xs"
                         style={{
                           borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
-                          background: s === "real" && m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                          background: s === "real" && m.mi < mesCierreReal ? "var(--cerrado-suave)" : undefined,
                         }}
                       >
                         {s === "real" ? "Real" : "Proy."}
-                        {s === "real" && m.mi < mesCierre ? " 🔒" : ""}
+                        {s === "real" && m.mi < mesCierreReal ? " 🔒" : ""}
                       </th>
                     ))
                   )}
@@ -759,10 +767,10 @@ export default function PresupuestoOpex() {
                           className="py-1.5 px-3 overflow-hidden"
                           style={{
                             borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
-                            background: s === "real" && m.mi < mesCierre ? "var(--cerrado-suave)" : undefined,
+                            background: s === "real" && m.mi < mesCierreReal ? "var(--cerrado-suave)" : undefined,
                           }}
                         >
-                          {s === "real" && m.mi < mesCierre ? (
+                          {s === "real" && m.mi < mesCierreReal ? (
                             <span
                               className="block text-center text-xs"
                               style={{ color: "var(--texto-suave)" }}
@@ -849,7 +857,7 @@ export default function PresupuestoOpex() {
                         className="py-2 px-3 text-center text-xs font-bold whitespace-nowrap"
                         style={{
                           borderLeft: s === "real" ? "1px solid var(--borde)" : undefined,
-                          background: s === "real" && m.mi < mesCierre ? "var(--cerrado-suave)" : "var(--bg)",
+                          background: s === "real" && m.mi < mesCierreReal ? "var(--cerrado-suave)" : "var(--bg)",
                         }}
                       >
                         {moneda2(s === "real" ? totalesPorMes[m.mi].real : totalesPorMes[m.mi].proyectado)}
