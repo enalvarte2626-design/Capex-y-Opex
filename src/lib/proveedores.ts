@@ -25,6 +25,20 @@ const SUFIJOS_EMPRESA = new Set([
   "CO",
 ]);
 
+const RANGO_DIACRITICOS = /[̀-ͯ]/g;
+
+/** Minúsculas y sin tildes/diéresis — para que buscar "candamo" encuentre "Cándamo" o
+ *  "CANDAMO S.A.". A diferencia de `claveNormalizada`, no agrupa por razón social: es
+ *  para filtrar una lista por coincidencia parcial (buscador de facturas por
+ *  proveedor/RUC/N° de factura), no para identificar duplicados. */
+export function normalizarBusqueda(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(RANGO_DIACRITICOS, "")
+    .toLowerCase()
+    .trim();
+}
+
 /** Exportada para que otros lugares (ej. la sugerencia de RUC por proveedor) agrupen con
  *  el mismo criterio exacto que `agruparProveedores`. */
 export function claveNormalizada(nombre: string): string {

@@ -6,7 +6,7 @@ import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { MES_CIERRE_POR_DEFECTO } from "@/lib/useMesCierre";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
-import { agruparProveedores, claveNormalizada, mapaRucPorProveedor } from "@/lib/proveedores";
+import { agruparProveedores, claveNormalizada, mapaRucPorProveedor, normalizarBusqueda } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
 import { useAnios } from "@/components/AnioProvider";
 import type { FacturaOpex } from "@/lib/opex-parse";
@@ -61,6 +61,10 @@ export default function FacturasOpex() {
   const [grupoSel, setGrupoSel] = useState("");
   const [subgrupoSel, setSubgrupoSel] = useState("");
   const [lineaSel, setLineaSel] = useState("");
+  // Busca entre TODAS las facturas ya registradas (no solo las últimas 25 que se
+  // muestran por defecto) — por Proveedor, RUC o N° de Comprobante, sin importar
+  // mayúsculas/tildes.
+  const [busquedaFactura, setBusquedaFactura] = useState("");
 
   const [form, setForm] = useState(formularioVacio);
   const [guardando, setGuardando] = useState(false);
@@ -141,6 +145,20 @@ export default function FacturasOpex() {
     () => mapaRucPorProveedor((datos?.facturas ?? []).map((f) => ({ proveedor: f.proveedor, ruc: f.ruc }))),
     [datos]
   );
+
+  // Facturas que coinciden con la búsqueda (Proveedor, RUC o N° de Comprobante) — sobre
+  // TODAS las facturas cargadas, no solo las que se muestran por defecto en la tabla.
+  const facturasFiltradas = useMemo(() => {
+    const todas = datos?.facturas ?? [];
+    const q = normalizarBusqueda(busquedaFactura);
+    if (!q) return todas;
+    return todas.filter(
+      (f) =>
+        normalizarBusqueda(f.proveedor || "").includes(q) ||
+        normalizarBusqueda(f.ruc || "").includes(q) ||
+        normalizarBusqueda(f.numeroComprobante || "").includes(q)
+    );
+  }, [datos, busquedaFactura]);
 
   const empresas = useMemo(() => Array.from(new Set((datos?.lineas ?? []).map((l) => l.empresa).filter(Boolean))).sort(), [datos]);
 
@@ -496,9 +514,20 @@ export default function FacturasOpex() {
             Descargar reporte (Excel)
           </a>
         </div>
+        <div className="px-4 pt-3">
+          <input
+            type="text"
+            className="campo"
+            style={{ maxWidth: 320 }}
+            placeholder="Buscar por Proveedor, RUC o N° de Comprobante…"
+            value={busquedaFactura}
+            onChange={(e) => setBusquedaFactura(e.target.value)}
+          />
+        </div>
         <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
-          El Excel descargado trae todas las columnas completas y viene ordenado por Línea de Gasto — la tabla de
-          abajo muestra las más recientes primero.
+          {busquedaFactura
+            ? `${facturasFiltradas.length} factura(s) encontrada(s) con "${busquedaFactura}".`
+            : "El Excel descargado trae todas las columnas completas y viene ordenado por Línea de Gasto — la tabla de abajo muestra las más recientes primero. Busca por Proveedor, RUC o N° de Comprobante para encontrar cualquier otra."}
         </p>
         <div className="overflow-x-auto p-4">
           <table className="border-collapse" style={{ tableLayout: "fixed", width: "100%", minWidth: 1730 }}>
@@ -533,7 +562,7 @@ export default function FacturasOpex() {
               </tr>
             </thead>
             <tbody>
-              {(datos?.facturas ?? []).slice(0, 25).map((f) => (
+              {(busquedaFactura ? facturasFiltradas : facturasFiltradas.slice(0, 25)).map((f) => (
                 <tr key={f.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
                   <td className="py-1.5 pr-3 text-xs" style={{ color: "var(--texto-suave)" }}>
                     {f.fecha}

@@ -5,7 +5,7 @@ import { NOMBRES_MES_CIERRE, type FacturaCapex } from "@/lib/capex";
 import { moneda2 } from "@/lib/format";
 import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/useTipoCambio";
 import { useNivelAcceso } from "@/lib/useNivelAcceso";
-import { agruparProveedores, claveNormalizada, mapaRucPorProveedor } from "@/lib/proveedores";
+import { agruparProveedores, claveNormalizada, mapaRucPorProveedor, normalizarBusqueda } from "@/lib/proveedores";
 import CampoEditable from "@/components/CampoEditable";
 
 interface ProyectoOpcion {
@@ -66,6 +66,10 @@ export default function Facturas() {
   const [proyectoNombreSel, setProyectoNombreSel] = useState("");
   const [detalleTexto, setDetalleTexto] = useState("");
   const [mostrarSugerenciasDetalle, setMostrarSugerenciasDetalle] = useState(false);
+  // Busca entre TODAS las facturas ya registradas (no solo las últimas 25 que se
+  // muestran por defecto) — por Proveedor, RUC o N° de Factura, sin importar
+  // mayúsculas/tildes.
+  const [busquedaFactura, setBusquedaFactura] = useState("");
 
   const [form, setForm] = useState(formularioVacio);
   const [guardando, setGuardando] = useState(false);
@@ -162,6 +166,20 @@ export default function Facturas() {
     () => mapaRucPorProveedor((datos?.facturas ?? []).map((f) => ({ proveedor: f.recurso, ruc: f.ruc }))),
     [datos]
   );
+
+  // Facturas que coinciden con la búsqueda (Proveedor, RUC o N° de Factura) — sobre
+  // TODAS las facturas cargadas, no solo las que se muestran por defecto en la tabla.
+  const facturasFiltradas = useMemo(() => {
+    const todas = datos?.facturas ?? [];
+    const q = normalizarBusqueda(busquedaFactura);
+    if (!q) return todas;
+    return todas.filter(
+      (f) =>
+        normalizarBusqueda(f.recurso || "").includes(q) ||
+        normalizarBusqueda(f.ruc || "").includes(q) ||
+        normalizarBusqueda(f.numeroFactura || "").includes(q)
+    );
+  }, [datos, busquedaFactura]);
 
   // Grupos de Negocio disponibles — elegir uno acota tanto el Proyecto como el Detalle
   // de abajo (opcional: se puede saltar directo a buscar por Proyecto o Detalle).
@@ -646,6 +664,16 @@ export default function Facturas() {
             </a>
           </div>
         </div>
+        <div className="px-4 pt-3">
+          <input
+            type="text"
+            className="campo"
+            style={{ maxWidth: 320 }}
+            placeholder="Buscar por Proveedor, RUC o N° de Factura…"
+            value={busquedaFactura}
+            onChange={(e) => setBusquedaFactura(e.target.value)}
+          />
+        </div>
         {mensajeMigracion && (
           <p
             className="px-4 pt-2 text-xs"
@@ -655,7 +683,9 @@ export default function Facturas() {
           </p>
         )}
         <p className="px-4 pt-1 text-xs" style={{ color: "var(--texto-suave)" }}>
-          El Excel descargado viene ordenado por Proyecto.
+          {busquedaFactura
+            ? `${facturasFiltradas.length} factura(s) encontrada(s) con "${busquedaFactura}".`
+            : "El Excel descargado viene ordenado por Proyecto. Mostrando las primeras 25 — busca por Proveedor, RUC o N° de Factura para encontrar cualquier otra."}
           {puedeEditar &&
             " Todos los campos de la tabla de abajo son editables directo — se guardan al salir del campo. Cambiar el Mes solo corrige la etiqueta de esta factura, no vuelve a sumar ni restar del presupuesto. El Monto solo se puede corregir cuando la app identifica con certeza a qué fila/mes de BD_CAPEX corresponde (si no, sale de solo lectura, con una nota)."}
         </p>
@@ -690,7 +720,7 @@ export default function Facturas() {
               </tr>
             </thead>
             <tbody>
-              {(datos?.facturas ?? []).slice(0, 25).map((f) => (
+              {(busquedaFactura ? facturasFiltradas : facturasFiltradas.slice(0, 25)).map((f) => (
                 <tr key={f.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
                   <td className="py-1.5 pr-3">
                     <CampoFecha
