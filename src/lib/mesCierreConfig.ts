@@ -1,6 +1,19 @@
 import type { ArchivoResuelto, ConfiguracionSharePoint } from "./sharepoint";
-import { ErrorSharePoint, crearArchivo, crearHojaSiNoExiste, descargarContenido, escribirCelda, leerCelda, listarNombresCarpeta } from "./sharepoint";
+import {
+  ErrorSharePoint,
+  crearArchivo,
+  crearHojaSiNoExiste,
+  descargarContenido,
+  escribirCelda,
+  escribirColumna,
+  leerCelda,
+  listarNombresCarpeta,
+} from "./sharepoint";
 import { MES_CIERRE_POR_DEFECTO } from "./opex-constantes";
+import { COL_PPTO_OPEX, extraerPresupuestoOpex } from "./opex-parse";
+import { leerCeldaCruda, leerWorkbook, ultimaFilaConDatos } from "./capex-parse";
+import { columnaALetra } from "./capex-editable";
+import { NOMBRES_MES_CIERRE } from "./capex";
 
 /**
  * "Mes de cierre" (1-12) guardado EN EL PROPIO EXCEL — no en localStorage ni en código —
@@ -74,16 +87,20 @@ export function construirNombreCierre(nombreActual: string, cerrados: number): s
 }
 
 /**
- * Genera el archivo del siguiente cierre de OPEX: una COPIA exacta del archivo en vivo,
- * con el nombre que sigue en la numeración "N+M" (ej. "8+4" → "9+3") — mismo criterio
- * que "Generar archivo de cierre" en CAPEX. El archivo actual NO se toca (nunca se
- * renombra ni se modifica), así que queda protegido tal como se presentó; el nuevo
- * archivo pasa a ser "el vivo" en cuanto la app lo detecta (mayor N en la carpeta).
+ * Genera el archivo del siguiente cierre de OPEX: una COPIA del archivo en vivo, con el
+ * nombre que sigue en la numeración "N+M" (ej. "8+4" → "9+3") — mismo criterio que
+ * "Generar archivo de cierre" en CAPEX. El archivo actual NO se toca (nunca se renombra
+ * ni se modifica), así que queda protegido tal como se presentó; el nuevo archivo pasa a
+ * ser "el vivo" en cuanto la app lo detecta (mayor N en la carpeta).
  *
- * A diferencia de CAPEX, OPEX no tiene ninguna fórmula de Forecast en el Excel que haga
- * falta reescribir (el Forecast se calcula aparte, en la propia app, a partir de estas
- * mismas celdas) — por eso acá alcanza con copiar el archivo tal cual, sin tocar
- * ninguna celda del archivo nuevo.
+ * "Presupuesto 2026" SÍ tiene su propia fórmula de FORECAST por fila (columna AK, con
+ * referencias de Tabla de Excel `[@[Gasto Proyectado <Mes>]]`) — a diferencia de lo que
+ * decía antes este comentario. Esa fórmula es fija: suma los meses que estaban por
+ * delante del cierre EN EL MOMENTO en que se escribió, y nunca se actualiza sola cuando
+ * la app cierra un mes más (el marcador de cierre vive en otra hoja, "Config App", que
+ * ninguna fórmula de Excel conoce) — por eso, igual que ya hace CAPEX, se reescribe acá
+ * mismo para que vuelva a sumar solo los meses que de verdad quedan por delante del
+ * cierre que se acaba de hacer.
  */
 export async function generarArchivoDeCierreOpex(
   config: ConfiguracionSharePoint,
@@ -103,7 +120,30 @@ export async function generarArchivoDeCierreOpex(
     throw new ErrorSharePoint(`Ya existe un archivo llamado "${nuevoNombre}" en esa carpeta.`);
   }
 
+  const hoja = process.env.SP_OPEX_HOJA_PRESUPUESTO?.trim() || "Presupuesto 2026";
   const contenido = await descargarContenido(config, archivo);
+  const wb = leerWorkbook(contenido);
+  const lineas = extraerPresupuestoOpex(wb, hoja);
+  const filasLinea = new Set(lineas.map((l) => l.filaExcel));
+  const ultimaFila = ultimaFilaConDatos(wb, hoja);
+
+  const colForecast = columnaALetra(COL_PPTO_OPEX.presupuestoAprobado + 2); // AK — dos después de AI (Presupuesto Aprobado)
+  // Meses que quedan POR DELANTE de este cierre (ej. cerrado Octubre -> Noviembre y
+  // Diciembre) — esos son los únicos que la fórmula de Forecast debe seguir sumando.
+  const mesesRestantes = Array.from({ length: 12 - mesCierreActual }, (_, i) => mesCierreActual + i + 1);
+  const formulaForecast =
+    mesesRestantes.length > 0
+      ? `=SUMA(${mesesRestantes.map((m) => `[@[Gasto Proyectado ${NOMBRES_MES_CIERRE[m - 1]}]]`).join("+")})`
+      : 0;
+
+  const valoresColumna: Array<string | number> = [];
+  for (let fila = 2; fila <= ultimaFila; fila++) {
+    // Filas que no son una línea de gasto (vacías, o algún subtotal suelto): se
+    // preservan tal cual, igual que ya hace CAPEX en su propio cierre.
+    valoresColumna.push(filasLinea.has(fila) ? formulaForecast : leerCeldaCruda(wb, hoja, `${colForecast}${fila}`));
+  }
+
   const nuevoArchivo = await crearArchivo(config, archivo.driveId, archivo.carpetaId, nuevoNombre, contenido);
+  await escribirColumna(config, nuevoArchivo, hoja, colForecast, 2, ultimaFila, valoresColumna);
   return { archivo: nuevoArchivo.nombre };
 }
