@@ -16,7 +16,6 @@ import {
   NOMBRES_MES,
   gastoPorGrupoNegocio,
   mesesATrimestres,
-  mesesConForecast,
   panoramaTrimestral,
   prioridadesDisponibles,
   resolverProyectos,
@@ -703,144 +702,113 @@ function ForecastPorGrupoOpexSection({
   tipoCambio: number;
 }) {
   const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null);
+  const [lineaAbierta, setLineaAbierta] = useState<number | null>(null); // filaExcel
 
   const grupos = Array.from(new Set(lineas.map((l) => l.grupoNegocio))).sort((a, b) => a.localeCompare(b, "es"));
-  const porGrupo = grupos.map((grupo) => {
-    const items = lineas
-      .filter((l) => l.grupoNegocio === grupo && l.forecast > 0.005)
-      .sort((a, b) => b.forecast - a.forecast); // la que más plata necesita todavía, primero
-    const totalForecast = items.reduce((a, l) => a + l.forecast, 0);
-    return { grupo, items, totalForecast };
-  });
+  const porGrupo = grupos
+    .map((grupo) => {
+      const items = lineas
+        .filter((l) => l.grupoNegocio === grupo && l.forecast > 0.005)
+        .sort((a, b) => b.forecast - a.forecast); // la que más plata necesita todavía, primero
+      const totalForecast = items.reduce((a, l) => a + l.forecast, 0);
+      return { grupo, items, totalForecast };
+    })
+    .filter((g) => g.items.length > 0);
 
-  const grupoModal = porGrupo.find((g) => g.grupo === grupoAbierto);
-
-  if (porGrupo.every((g) => g.items.length === 0)) return null;
+  if (porGrupo.length === 0) return null;
 
   return (
     <div className="card p-4">
       <h2 className="font-semibold mb-4">Forecast por línea presupuestal, por grupo de gasto</h2>
       <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
-        Cuánta plata falta por gastar (proyectado en los meses que quedan) en cada línea presupuestal — para saber
-        cuánto se va a necesitar todavía por grupo de gasto.
+        Cuánta plata falta por gastar (proyectado en los meses que quedan) en cada línea presupuestal — toca un grupo
+        para ver sus líneas, y una línea para ver el detalle mes a mes.
       </p>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-        {porGrupo.map((g) => (
-          <button
-            key={g.grupo}
-            type="button"
-            onClick={() => setGrupoAbierto(g.grupo)}
-            disabled={g.items.length === 0}
-            className="rounded-lg p-2 text-left"
-            style={{
-              background: "var(--acento-suave)",
-              cursor: g.items.length === 0 ? "default" : "pointer",
-              opacity: g.items.length === 0 ? 0.5 : 1,
-            }}
-            title={g.items.length > 0 ? "Toca para ver el detalle" : undefined}
-          >
-            <p className="text-lg font-bold leading-tight" style={{ color: GRIS_TEMPLATE }}>
-              {moneda2(g.totalForecast)}
-            </p>
-            <p className="text-xs font-semibold truncate">
-              {g.grupo} · {g.items.length} línea(s)
-            </p>
-            {g.items[0] && (
-              <p className="text-xs truncate" style={{ color: "var(--texto-suave)" }} title={g.items[0].proyecto}>
-                Más alta: {g.items[0].proyecto || "—"} ({moneda2(g.items[0].forecast)})
-              </p>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {grupoModal && (
-        <div
-          className="fixed inset-0 flex items-center justify-center p-6"
-          style={{ background: "rgba(0,0,0,0.4)", zIndex: 50 }}
-          onClick={() => setGrupoAbierto(null)}
-        >
-          <div
-            className="card p-4 w-full flex flex-col"
-            style={{ maxWidth: 900, maxHeight: "85vh", background: "var(--card)" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3 shrink-0">
-              <h2 className="font-semibold">
-                {grupoModal.grupo} — Forecast por línea presupuestal ({grupoModal.items.length})
-              </h2>
+      <div className="flex flex-col gap-2">
+        {porGrupo.map((g) => {
+          const abierto = grupoAbierto === g.grupo;
+          return (
+            <div key={g.grupo} className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--borde)" }}>
               <button
-                className="text-xl leading-none px-2"
-                style={{ color: "var(--texto-suave)" }}
-                onClick={() => setGrupoAbierto(null)}
+                type="button"
+                onClick={() => setGrupoAbierto(abierto ? null : g.grupo)}
+                className="w-full flex items-center justify-between gap-3 p-3 text-left"
+                style={{ background: abierto ? "var(--acento-suave)" : "var(--card)" }}
               >
-                ×
+                <span className="text-sm font-semibold">
+                  {g.grupo} <span className="font-normal" style={{ color: "var(--texto-suave)" }}>· {g.items.length} línea(s)</span>
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="font-bold" style={{ color: GRIS_TEMPLATE }}>
+                    {moneda2(g.totalForecast)}
+                  </span>
+                  <span style={{ color: "var(--texto-suave)" }}>{abierto ? "▲" : "▾"}</span>
+                </span>
               </button>
-            </div>
-            <div style={{ overflow: "auto" }}>
-              <table className="w-full text-sm border-collapse">
-                <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
-                  <tr className="text-left" style={{ color: "var(--texto-suave)", background: "var(--card)" }}>
-                    <th className="py-2 pr-4 font-semibold">Línea presupuestal</th>
-                    <th className="py-2 pr-4 font-semibold">Detalle</th>
-                    <th className="py-2 pr-4 font-semibold">Trimestre(s)</th>
-                    <th className="py-2 pr-4 font-semibold">Meses</th>
-                    <th className="py-2 px-3 text-right font-semibold">Forecast</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {grupoModal.items.map((l, i) => {
-                    const { meses, trimestres } = mesesConForecast(l, mesCierre);
-                    const esLaMasAlta = i === 0;
+
+              {abierto && (
+                <div className="p-2 flex flex-col gap-1.5" style={{ borderTop: "1px solid var(--borde)" }}>
+                  {g.items.map((l, i) => {
+                    const lineaOpen = lineaAbierta === l.filaExcel;
+                    const mesesConMonto = [];
+                    for (let m = mesCierre; m < 12; m++) {
+                      if (l.proyectado[m] > 0.005) mesesConMonto.push({ nombre: NOMBRES_MES[m], valor: l.proyectado[m] });
+                    }
                     return (
-                      <tr key={l.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
-                        <td className="py-1.5 pr-4 font-semibold">
-                          {l.proyecto}
-                          {esLaMasAlta && (
-                            <span
-                              className="ml-2 text-xs font-semibold rounded-full px-2 py-0.5"
-                              style={{ background: "#fbe7ea", color: ROSA_TEMPLATE }}
-                            >
-                              más alta
-                            </span>
-                          )}
-                        </td>
-                        <td
-                          className="py-1.5 pr-4"
-                          style={{ color: "var(--texto-suave)", maxWidth: 240 }}
-                          title={l.detalle}
+                      <div key={l.filaExcel} className="rounded-md" style={{ background: "var(--bg)" }}>
+                        <button
+                          type="button"
+                          onClick={() => setLineaAbierta(lineaOpen ? null : l.filaExcel)}
+                          className="w-full flex items-center justify-between gap-3 p-2 text-left text-sm"
                         >
-                          {l.detalle || "—"}
-                        </td>
-                        <td className="py-1.5 pr-4 whitespace-nowrap">{trimestres}</td>
-                        <td className="py-1.5 pr-4 whitespace-nowrap" style={{ color: "var(--texto-suave)" }}>
-                          {meses}
-                        </td>
-                        <td className="py-1.5 px-3 text-right font-bold" style={{ color: GRIS_TEMPLATE }}>
-                          {moneda2(l.forecast)}
-                          <MontoSoles valorUsd={l.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
-                        </td>
-                      </tr>
+                          <span className="truncate" title={l.detalle ? `${l.proyecto} — ${l.detalle}` : l.proyecto}>
+                            {l.proyecto || "—"}
+                            {i === 0 && (
+                              <span
+                                className="ml-2 text-xs font-semibold rounded-full px-2 py-0.5"
+                                style={{ background: "#fbe7ea", color: ROSA_TEMPLATE }}
+                              >
+                                más alta
+                              </span>
+                            )}
+                          </span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <strong style={{ color: GRIS_TEMPLATE }}>{moneda2(l.forecast)}</strong>
+                            <span className="text-xs" style={{ color: "var(--texto-suave)" }}>
+                              {lineaOpen ? "▲" : "▾"}
+                            </span>
+                          </span>
+                        </button>
+                        {lineaOpen && (
+                          <div className="px-2 pb-2 text-xs" style={{ color: "var(--texto-suave)" }}>
+                            {l.detalle && <p className="mb-1">{l.detalle}</p>}
+                            {mesesConMonto.length > 0 ? (
+                              mesesConMonto.map((m) => (
+                                <div key={m.nombre} className="flex items-center justify-between py-0.5" style={{ borderTop: "1px solid var(--borde)" }}>
+                                  <span>{m.nombre}</span>
+                                  <span className="font-medium" style={{ color: "var(--texto)" }}>
+                                    {moneda2(m.valor)}
+                                    {mostrarSoles && (
+                                      <MontoSoles valorUsd={m.valor} tipoCambio={tipoCambio} mostrarSoles className="inline-block ml-1 text-[10px]" />
+                                    )}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <p>Sin meses pendientes.</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                </tbody>
-                <tfoot style={{ position: "sticky", bottom: 0, zIndex: 1 }}>
-                  <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
-                    <td className="py-2 pr-4 font-bold" colSpan={4}>
-                      Total
-                    </td>
-                    <td className="py-2 px-3 text-right font-bold" style={{ color: GRIS_TEMPLATE }}>
-                      {moneda2(grupoModal.totalForecast)}
-                      <MontoSoles valorUsd={grupoModal.totalForecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                </div>
+              )}
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
