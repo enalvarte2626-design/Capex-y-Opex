@@ -33,11 +33,11 @@ export async function GET() {
 }
 
 /**
- * Cierra un mes más — solo se puede AVANZAR (nunca reabrir uno ya cerrado desde acá), y
- * solo de a un mes a la vez. Separado a propósito de "Generar archivo de cierre"
- * (/api/capex/cerrar-mes, que solo crea el archivo nuevo): generar el archivo ya no
- * cierra nada por sí solo — hay que venir acá explícitamente cuando el mes esté
- * realmente completo.
+ * Mueve el mes de cierre un paso — hacia adelante (cerrar) o hacia atrás (reabrir el
+ * último mes cerrado), siempre de a un mes a la vez para que no se salte ninguno por
+ * error. Separado a propósito de "Generar archivo de cierre" (/api/capex/cerrar-mes,
+ * que solo crea el archivo nuevo): generar el archivo ya no cierra nada por sí solo —
+ * hay que venir acá explícitamente cuando el mes esté realmente completo.
  */
 export async function POST(request: Request) {
   const config = obtenerConfiguracionSharePoint();
@@ -48,13 +48,25 @@ export async function POST(request: Request) {
 
   const cuerpo = await request.json().catch(() => null);
   const mesNuevo = Number(cuerpo?.mes);
-  if (!Number.isInteger(mesNuevo) || mesNuevo < 1 || mesNuevo > 12) {
+  if (!Number.isInteger(mesNuevo) || mesNuevo < 0 || mesNuevo > 12) {
     return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
   }
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
     const mesCierreActual = await leerMesCierre(config, archivo, valorPorDefecto(archivo.nombre));
+
+    if (mesNuevo === mesCierreActual - 1) {
+      // Reabrir: retrocede exactamente el último mes cerrado, nunca más de uno de un
+      // salto. De acá en adelante una factura nueva de ese mes vuelve a sumar al Gasto
+      // Real al registrarla — tal como era antes de haberlo cerrado.
+      await escribirMesCierre(config, archivo, mesNuevo);
+      return NextResponse.json({
+        ok: true,
+        mesCierre: mesNuevo,
+        nombreMesCierre: mesNuevo > 0 ? NOMBRES_MES_CIERRE[mesNuevo - 1] : null,
+      });
+    }
 
     if (mesNuevo <= mesCierreActual) {
       return NextResponse.json(
