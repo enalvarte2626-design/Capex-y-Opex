@@ -999,6 +999,7 @@ function PanoramaTrimestralSection({
 }) {
   const [trimestresAbiertos, setTrimestresAbiertos] = useState<Set<number>>(new Set());
   const [gruposAbiertos, setGruposAbiertos] = useState<Set<string>>(new Set());
+  const [detalleCelda, setDetalleCelda] = useState<{ grupo: string; columna: ColumnaPanorama } | null>(null);
   const columnas = useMemo(() => construirColumnas(mesCierre, trimestresAbiertos), [mesCierre, trimestresAbiertos]);
 
   const lineasPorGrupo = useMemo(() => {
@@ -1117,6 +1118,7 @@ function PanoramaTrimestralSection({
                 celda={celda}
                 abierto={gruposAbiertos.has(g.grupoNegocio)}
                 onAlternar={() => alternarGrupo(g.grupoNegocio)}
+                onCeldaMesClick={(columna) => setDetalleCelda({ grupo: g.grupoNegocio, columna })}
               />
             ))}
             <tr style={{ background: "var(--acento-suave)", borderTop: "2px solid var(--borde)" }}>
@@ -1151,6 +1153,72 @@ function PanoramaTrimestralSection({
           </tbody>
         </table>
       </div>
+
+      {detalleCelda &&
+        (() => {
+          const lineasDelGrupo = lineasPorGrupo.get(detalleCelda.grupo) ?? [];
+          const filas = lineasDelGrupo
+            .map((l) => ({ l, monto: detalleCelda.columna.valor(filaTrimestralDeLinea(l)) }))
+            .filter((x) => x.monto > 0.005)
+            .sort((a, b) => b.monto - a.monto);
+          const total = filas.reduce((a, x) => a + x.monto, 0);
+          const nombreColumna = detalleCelda.columna.subEtiqueta
+            ? `${detalleCelda.columna.etiqueta} (${detalleCelda.columna.subEtiqueta})`
+            : detalleCelda.columna.etiqueta;
+          return (
+            <div
+              className="fixed inset-0 flex items-center justify-center p-6"
+              style={{ background: "rgba(0,0,0,0.4)", zIndex: 50 }}
+              onClick={() => setDetalleCelda(null)}
+            >
+              <div
+                className="card p-4 w-full flex flex-col"
+                style={{ maxWidth: 560, maxHeight: "85vh", background: "var(--card)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-3 shrink-0">
+                  <h2 className="font-semibold">
+                    {detalleCelda.grupo} — {nombreColumna}
+                  </h2>
+                  <button
+                    className="text-xl leading-none px-2"
+                    style={{ color: "var(--texto-suave)" }}
+                    onClick={() => setDetalleCelda(null)}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ overflow: "auto" }}>
+                  {filas.length === 0 ? (
+                    <p className="text-sm" style={{ color: "var(--texto-suave)" }}>
+                      Ninguna línea de este grupo tiene monto en {nombreColumna}.
+                    </p>
+                  ) : (
+                    <table className="w-full text-sm border-collapse">
+                      <tbody>
+                        {filas.map(({ l, monto }) => (
+                          <tr key={l.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
+                            <td className="py-1.5 pr-4" title={l.detalle || l.proyecto}>
+                              {l.proyecto}
+                              {l.detalle && <span style={{ color: "var(--texto-suave)" }}> — {l.detalle}</span>}
+                            </td>
+                            <td className="py-1.5 pl-3 text-right font-semibold whitespace-nowrap">{celda(monto)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
+                          <td className="py-2 pr-4 font-bold">Total</td>
+                          <td className="py-2 pl-3 text-right font-bold whitespace-nowrap">{celda(total)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
     </div>
   );
 }
@@ -1162,6 +1230,7 @@ function FragmentGrupo({
   celda,
   abierto,
   onAlternar,
+  onCeldaMesClick,
 }: {
   grupo: PanoramaTrimestral["grupos"][number];
   lineasDelGrupo: ProyectoResuelto[];
@@ -1169,6 +1238,9 @@ function FragmentGrupo({
   celda: (v: number) => React.ReactNode;
   abierto: boolean;
   onAlternar: () => void;
+  /** Al tocar el monto de un mes (no trimestre) en la fila de subtotal del grupo — abre
+   *  el detalle por línea de ese mes puntual, sin tener que expandir todo el grupo. */
+  onCeldaMesClick: (columna: ColumnaPanorama) => void;
 }) {
   const lineasPorPrioridad = useMemo(() => {
     const mapa = new Map<string, ProyectoResuelto[]>();
@@ -1209,11 +1281,27 @@ function FragmentGrupo({
           </span>
         </td>
         <td className="py-1.5 px-3 text-right font-semibold">{celda(grupo.subtotal.total)}</td>
-        {columnas.map((c) => (
-          <td key={c.clave} className="py-1.5 px-3 text-right font-semibold" style={{ background: fondoCierre(c.estadoCierre) }}>
-            {celda(c.valor(grupo.subtotal))}
-          </td>
-        ))}
+        {columnas.map((c) => {
+          const esMes = !!c.subEtiqueta;
+          return (
+            <td
+              key={c.clave}
+              className="py-1.5 px-3 text-right font-semibold"
+              style={{ background: fondoCierre(c.estadoCierre), cursor: esMes ? "pointer" : undefined }}
+              onClick={
+                esMes
+                  ? (e) => {
+                      e.stopPropagation();
+                      onCeldaMesClick(c);
+                    }
+                  : undefined
+              }
+              title={esMes ? `Ver el detalle por línea de ${c.etiqueta}` : undefined}
+            >
+              {celda(c.valor(grupo.subtotal))}
+            </td>
+          );
+        })}
       </tr>
       {abierto &&
         grupo.filas.map((fila) => (
