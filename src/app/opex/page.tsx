@@ -143,6 +143,18 @@ export default function DashboardOpex() {
   const porGrupo = useMemo(() => gastoPorGrupoNegocio(filtradas), [filtradas]);
   const panorama = useMemo(() => panoramaTrimestral(filtradas), [filtradas]);
 
+  // Forecast total, desglosado mes a mes — solo los meses que todavía faltan por
+  // ejecutar (de mesCierre en adelante). Si no queda ningún mes por delante (año ya
+  // cerrado del todo), el detalle queda vacío.
+  const forecastPorMes = useMemo(
+    () =>
+      NOMBRES_MES.map((nombre, mi) => ({
+        nombre,
+        valor: filtradas.reduce((a, l) => a + l.proyectado[mi], 0),
+      })).filter((m, mi) => mi >= mesCierre && m.valor > 0.005),
+    [filtradas, mesCierre]
+  );
+
   const totales = useMemo(
     () =>
       filtradas.reduce(
@@ -231,7 +243,13 @@ export default function DashboardOpex() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <TarjetaKpi titulo="Presupuesto aprobado" valor={totales.presupuestoAprobado} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
         <TarjetaKpi titulo="Gasto real" valor={totales.gastoReal} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
-        <TarjetaKpi titulo="Forecast (por ejecutar)" valor={totales.forecast} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
+        <TarjetaKpi
+          titulo="Forecast (por ejecutar)"
+          valor={totales.forecast}
+          mostrarSoles={mostrarSoles}
+          tipoCambio={tipoCambio}
+          detalle={forecastPorMes.map((m) => ({ nombre: m.nombre, valor: m.valor }))}
+        />
         <TarjetaKpi
           titulo="Diferencia"
           valor={totales.diferencia}
@@ -306,12 +324,16 @@ function TarjetaKpi({
   color,
   mostrarSoles,
   tipoCambio,
+  detalle,
 }: {
   titulo: string;
   valor: number;
   color?: string;
   mostrarSoles?: boolean;
   tipoCambio?: number;
+  /** Desglose opcional debajo del total (ej. Forecast mes a mes) — en vez de un solo
+   *  número general, muestra de qué meses/partes viene. */
+  detalle?: { nombre: string; valor: number }[];
 }) {
   return (
     <div className="card p-4">
@@ -323,6 +345,16 @@ function TarjetaKpi({
         <p className="text-sm mt-0.5" style={{ color: "var(--texto-suave)" }}>
           S/ {(valor * (tipoCambio ?? 1)).toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </p>
+      )}
+      {detalle && detalle.length > 0 && (
+        <div className="mt-2 pt-2" style={{ borderTop: "1px solid var(--borde)" }}>
+          {detalle.map((d) => (
+            <div key={d.nombre} className="flex items-center justify-between text-xs" style={{ color: "var(--texto-suave)" }}>
+              <span>{d.nombre}</span>
+              <span>{moneda2(d.valor)}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
