@@ -245,6 +245,8 @@ export default function DashboardOpex() {
         />
       </div>
 
+      <RitmoEjecucionSection mesCierre={mesCierre} totales={totales} />
+
       <div className="card p-4">
         <h2 className="font-semibold mb-4">Gasto por grupo de gasto</h2>
         <ResponsiveContainer width="100%" height={Math.max(220, porGrupo.length * 34)}>
@@ -293,6 +295,80 @@ export default function DashboardOpex() {
         mostrarSoles={mostrarSoles}
         tipoCambio={tipoCambio}
       />
+    </div>
+  );
+}
+
+/**
+ * Compara qué tan avanzado va el año (mes de cierre real ÷ 12) contra qué porcentaje del
+ * Presupuesto Aprobado ya está ejecutado o proyectado (Gasto Real + Forecast) — para ver
+ * de un vistazo si el gasto va al ritmo del calendario, más rápido (riesgo de quedarse
+ * sin presupuesto antes de fin de año) o más lento (margen de sobra).
+ */
+function RitmoEjecucionSection({
+  mesCierre,
+  totales,
+}: {
+  mesCierre: number;
+  totales: { presupuestoAprobado: number; gastoReal: number; forecast: number };
+}) {
+  const tiempoPct = (mesCierre / 12) * 100;
+  const ejecutadoPct = totales.presupuestoAprobado > 0 ? ((totales.gastoReal + totales.forecast) / totales.presupuestoAprobado) * 100 : 0;
+  const diferenciaPct = ejecutadoPct - tiempoPct;
+
+  let veredicto: string;
+  let colorVeredicto: string;
+  if (Math.abs(diferenciaPct) < 1) {
+    veredicto = "Vas alineado con el ritmo del año.";
+    colorVeredicto = GRIS_TEMPLATE;
+  } else if (diferenciaPct > 0) {
+    veredicto = `Vas ${diferenciaPct.toFixed(1)} puntos por encima del ritmo esperado del año.`;
+    colorVeredicto = ROSA_TEMPLATE;
+  } else {
+    veredicto = `Vas ${Math.abs(diferenciaPct).toFixed(1)} puntos por debajo del ritmo esperado del año.`;
+    colorVeredicto = "var(--exito)";
+  }
+
+  return (
+    <div className="card p-4">
+      <h2 className="font-semibold mb-1">Ritmo de ejecución</h2>
+      <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
+        Compara cuánto del año ya pasó contra cuánto del presupuesto ya está ejecutado o proyectado.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1" style={{ color: "var(--texto-suave)" }}>
+            <span>Tiempo transcurrido</span>
+            <span>
+              {tiempoPct.toFixed(0)}% ({mesCierre} de 12 meses)
+            </span>
+          </div>
+          <div className="rounded-full overflow-hidden" style={{ background: "var(--bg)", height: 10 }}>
+            <div
+              style={{ width: `${Math.min(100, tiempoPct)}%`, height: "100%", background: GRIS_TEMPLATE, borderRadius: 999 }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between text-xs mb-1" style={{ color: "var(--texto-suave)" }}>
+            <span>Ejecutado + proyectado</span>
+            <span>
+              {ejecutadoPct.toFixed(0)}% ({moneda2(totales.gastoReal + totales.forecast)} de {moneda2(totales.presupuestoAprobado)})
+            </span>
+          </div>
+          <div className="rounded-full overflow-hidden" style={{ background: "var(--bg)", height: 10 }}>
+            <div
+              style={{ width: `${Math.min(100, ejecutadoPct)}%`, height: "100%", background: "var(--acento)", borderRadius: 999 }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <p className="text-sm font-semibold mt-3" style={{ color: colorVeredicto }}>
+        {veredicto}
+      </p>
     </div>
   );
 }
