@@ -281,12 +281,6 @@ export default function DashboardOpex() {
         </ResponsiveContainer>
       </div>
 
-      <AdvertenciasDatosSection filtradas={filtradas} />
-
-      <TablaLineasOpex filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
-
-      <LineasSinGastoSection filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
-
       <PanoramaTrimestralSection
         titulo={`Panorama OPEX ${anio}`}
         panorama={panorama}
@@ -295,6 +289,12 @@ export default function DashboardOpex() {
         mostrarSoles={mostrarSoles}
         tipoCambio={tipoCambio}
       />
+
+      <AdvertenciasDatosSection filtradas={filtradas} />
+
+      <TablaLineasOpex filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
+
+      <LineasSinGastoSection filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
     </div>
   );
 }
