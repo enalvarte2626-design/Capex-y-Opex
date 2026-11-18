@@ -96,6 +96,9 @@ export default function DashboardOpex() {
   const [mesCierre, setMesCierre] = useState<number>(MES_CIERRE_POR_DEFECTO);
   const [mostrarSoles, setMostrarSoles] = usePersistedState("opex-dashboard-mostrarSoles", false);
   const [tipoCambio, setTipoCambio] = useTipoCambio();
+  // Grupo tocado en el gráfico "Gasto por grupo de gasto" — abre el detalle por línea de
+  // ese grupo en una ventana aparte, sin tener que buscarlo en Panorama OPEX.
+  const [grupoGraficoAbierto, setGrupoGraficoAbierto] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/opex/mes-cierre", { cache: "no-store" })
@@ -248,7 +251,10 @@ export default function DashboardOpex() {
       <RitmoEjecucionSection mesCierre={mesCierre} totales={totales} />
 
       <div className="card p-4">
-        <h2 className="font-semibold mb-4">Gasto por grupo de gasto</h2>
+        <h2 className="font-semibold mb-1">Gasto por grupo de gasto</h2>
+        <p className="text-sm mb-4" style={{ color: "var(--texto-suave)" }}>
+          Toca una barra para ver qué líneas presupuestales componen ese grupo.
+        </p>
         <ResponsiveContainer width="100%" height={Math.max(220, porGrupo.length * 34)}>
           <BarChart data={porGrupo} layout="vertical" margin={{ left: 16 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--borde)" />
@@ -261,25 +267,50 @@ export default function DashboardOpex() {
             <Tooltip formatter={(v: number) => (mostrarSoles ? `${moneda(v)} · ${soles(v, tipoCambio)}` : moneda(v))} />
             <Legend />
             {/* fill del <Bar> = lo que muestra la Leyenda (un color fijo por serie); el
-                color real de cada barra lo pone el <Cell> de abajo, por grupo. */}
+                color real de cada barra lo pone el <Cell> de abajo, por grupo. Cada <Cell>
+                es clickeable: abre el detalle por línea de ese grupo puntual. */}
             <Bar dataKey="gastoReal" name="Gasto real" stackId="a" fill={GRIS_TEMPLATE}>
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill={colorPorGrupo[g.grupoNegocio] ?? GRIS_TEMPLATE} />
+                <Cell
+                  key={g.grupoNegocio}
+                  fill={colorPorGrupo[g.grupoNegocio] ?? GRIS_TEMPLATE}
+                  cursor="pointer"
+                  onClick={() => setGrupoGraficoAbierto(g.grupoNegocio)}
+                />
               ))}
             </Bar>
             <Bar dataKey="forecast" name="Forecast" stackId="a" fill="#e0778a" fillOpacity={0.45}>
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill={colorPorGrupo[g.grupoNegocio] ?? GRIS_TEMPLATE} />
+                <Cell
+                  key={g.grupoNegocio}
+                  fill={colorPorGrupo[g.grupoNegocio] ?? GRIS_TEMPLATE}
+                  cursor="pointer"
+                  onClick={() => setGrupoGraficoAbierto(g.grupoNegocio)}
+                />
               ))}
             </Bar>
             <Bar dataKey="presupuestoAprobado" name="Presupuesto aprobado" fill="#c8c6c4">
               {porGrupo.map((g) => (
-                <Cell key={g.grupoNegocio} fill="#201f1e" fillOpacity={0.15} />
+                <Cell
+                  key={g.grupoNegocio}
+                  fill="#201f1e"
+                  fillOpacity={0.15}
+                  cursor="pointer"
+                  onClick={() => setGrupoGraficoAbierto(g.grupoNegocio)}
+                />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
+
+      <DetalleGrupoModal
+        grupo={grupoGraficoAbierto}
+        lineas={filtradas}
+        mostrarSoles={mostrarSoles}
+        tipoCambio={tipoCambio}
+        onCerrar={() => setGrupoGraficoAbierto(null)}
+      />
 
       <PanoramaTrimestralSection
         titulo={`Panorama OPEX ${anio}`}
@@ -295,6 +326,110 @@ export default function DashboardOpex() {
       <TablaLineasOpex filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
 
       <LineasSinGastoSection filtradas={filtradas} mostrarSoles={mostrarSoles} tipoCambio={tipoCambio} />
+    </div>
+  );
+}
+
+/**
+ * Detalle por línea presupuestal de un grupo puntual — se abre al tocar una barra del
+ * gráfico "Gasto por grupo de gasto" en el Dashboard. `grupo === null` no renderiza nada.
+ */
+function DetalleGrupoModal({
+  grupo,
+  lineas,
+  mostrarSoles,
+  tipoCambio,
+  onCerrar,
+}: {
+  grupo: string | null;
+  lineas: ProyectoResuelto[];
+  mostrarSoles: boolean;
+  tipoCambio: number;
+  onCerrar: () => void;
+}) {
+  if (!grupo) return null;
+
+  const items = lineas
+    .filter((l) => (l.grupoNegocio || "SIN GRUPO") === grupo)
+    .sort((a, b) => b.gastoReal + b.forecast - (a.gastoReal + a.forecast));
+  const totales = items.reduce(
+    (acc, l) => ({
+      presupuestoAprobado: acc.presupuestoAprobado + l.presupuestoAprobado,
+      gastoReal: acc.gastoReal + l.gastoReal,
+      forecast: acc.forecast + l.forecast,
+      diferencia: acc.diferencia + l.diferencia,
+    }),
+    { presupuestoAprobado: 0, gastoReal: 0, forecast: 0, diferencia: 0 }
+  );
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center p-6" style={{ background: "rgba(0,0,0,0.4)", zIndex: 50 }} onClick={onCerrar}>
+      <div
+        className="card p-4 w-full flex flex-col"
+        style={{ maxWidth: 820, maxHeight: "85vh", background: "var(--card)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3 shrink-0">
+          <h2 className="font-semibold">
+            {grupo} — líneas presupuestales ({items.length})
+          </h2>
+          <button className="text-xl leading-none px-2" style={{ color: "var(--texto-suave)" }} onClick={onCerrar}>
+            ×
+          </button>
+        </div>
+        <div style={{ overflow: "auto" }}>
+          <table className="w-full text-sm border-collapse">
+            <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
+              <tr className="text-left" style={{ color: "var(--texto-suave)", background: "var(--card)" }}>
+                <th className="py-2 pr-4 font-semibold">Línea presupuestal</th>
+                <th className="py-2 px-3 text-right font-semibold">Presupuesto</th>
+                <th className="py-2 px-3 text-right font-semibold">Gasto real</th>
+                <th className="py-2 px-3 text-right font-semibold">Forecast</th>
+                <th className="py-2 px-3 text-right font-semibold">Diferencia</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((l) => (
+                <tr key={l.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
+                  <td className="py-1.5 pr-4" title={l.detalle || l.proyecto}>
+                    {l.proyecto}
+                    {l.detalle && <span style={{ color: "var(--texto-suave)" }}> — {l.detalle}</span>}
+                  </td>
+                  <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                    {moneda2(l.presupuestoAprobado)}
+                    <MontoSoles valorUsd={l.presupuestoAprobado} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                  </td>
+                  <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                    {moneda2(l.gastoReal)}
+                    <MontoSoles valorUsd={l.gastoReal} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                  </td>
+                  <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                    {moneda2(l.forecast)}
+                    <MontoSoles valorUsd={l.forecast} tipoCambio={tipoCambio} mostrarSoles={mostrarSoles} className="block text-xs font-normal" />
+                  </td>
+                  <td
+                    className="py-1.5 px-3 text-right font-semibold whitespace-nowrap"
+                    style={{ color: l.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE }}
+                  >
+                    {moneda2(l.diferencia)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot style={{ position: "sticky", bottom: 0, zIndex: 1 }}>
+              <tr style={{ borderTop: "2px solid var(--borde)", background: "var(--acento-suave)" }}>
+                <td className="py-2 pr-4 font-bold">Total</td>
+                <td className="py-2 px-3 text-right font-bold whitespace-nowrap">{moneda2(totales.presupuestoAprobado)}</td>
+                <td className="py-2 px-3 text-right font-bold whitespace-nowrap">{moneda2(totales.gastoReal)}</td>
+                <td className="py-2 px-3 text-right font-bold whitespace-nowrap">{moneda2(totales.forecast)}</td>
+                <td className="py-2 px-3 text-right font-bold whitespace-nowrap" style={{ color: totales.diferencia < 0 ? ROSA_TEMPLATE : GRIS_TEMPLATE }}>
+                  {moneda2(totales.diferencia)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }
