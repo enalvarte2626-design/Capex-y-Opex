@@ -1,58 +1,39 @@
 import { NextResponse } from "next/server";
-import {
-  ErrorSharePoint,
-  agregarFilaTabla,
-  asegurarTablaEnHoja,
-  camposFaltantesOpex,
-  crearHojaSiNoExiste,
-  descargarContenido,
-  escribirCelda,
-  escribirFila,
-  leerCelda,
-  obtenerConfiguracionOpex,
-  resolverArchivoPorShareUrl,
-} from "@/lib/sharepoint";
-import { COL_PPTO_OPEX, ENCABEZADOS_FACTURAS_OPEX, ENCABEZADOS_MONTO_EUROS_OPEX, extraerPresupuestoOpex } from "@/lib/opex-parse";
-import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
-import { columnaALetra } from "@/lib/capex-editable";
-import { TIPO_CAMBIO_EUR_POR_DEFECTO, TIPO_CAMBIO_POR_DEFECTO } from "@/lib/opex-constantes";
-import { leerMesCierre } from "@/lib/mesCierreConfig";
+import { ErrorSharePoint, agregarFilaTabla, camposFaltantesOpex, obtenerConfiguracionOpex, resolverArchivoPorShareUrl } from "@/lib/sharepoint";
+import { COL_PPTO_OPEX } from "@/lib/opex-parse";
 
 export const dynamic = "force-dynamic";
 
-/** Encabezados completos de la hoja de facturas, incluido el soporte de Euros agregado
- *  después — se usan juntos para crear/ensanchar la Tabla de Excel de una sola vez. */
-const ENCABEZADOS_FACTURAS_OPEX_COMPLETO = [...ENCABEZADOS_FACTURAS_OPEX, ...ENCABEZADOS_MONTO_EUROS_OPEX];
-
-interface CuerpoRegistro {
-  filaPresupuesto: number;
-  mes: number; // 1-12
-  /** En qué moneda ingresó la persona `monto` — "PEN" (Soles sin IGV, se convierte acá
-   *  a USD), "USD" (ya viene en dólares, se usa tal cual) o "EUR" (se convierte con el
-   *  tipo de cambio Euro→Dólar de la app). */
-  moneda: "PEN" | "USD" | "EUR";
-  /** El valor tal cual lo escribió la persona, en la moneda indicada por `moneda`. */
-  monto: number;
-  proveedor: string;
-  numeroComprobante: string;
-  comentario?: string;
-  /** RUC del proveedor — opcional, solo aplica a proveedores peruanos. */
-  ruc?: string;
+interface CuerpoNuevaLinea {
+  empresa: string;
+  grupoGasto: string;
+  subgrupoGasto: string;
+  lineaGasto: string;
+  moneda?: string;
+  detalle?: string;
+  responsable?: string;
+  presupuestoAprobado: number;
 }
 
 /**
- * Registra una factura de OPEX desde cero (la hoja "Facturas Opex - App" no existía
- * antes de este módulo — se crea sola la primera vez que hace falta, con encabezados).
- * La línea de gasto se elige de antemano (Grupo→Subgrupo→Línea, ya resuelta a una fila
- * puntual de "Presupuesto 2026") — nunca se adivina por texto. Suma el monto al Gasto
- * Real del mes correspondiente sin reemplazar lo que ya hubiera (una línea puede tener
- * varias facturas en el mismo mes).
+ * Agrega una línea de gasto nueva a "Presupuesto 2026" — directo, sin pasar por
+ * Planificación. Los 12 meses (Proyectado/Real) arrancan en 0 — se llenan después desde
+ * la misma tabla (celda por celda) o registrando facturas en Facturas OPEX. Status
+ * arranca en "Activa".
  *
- * El monto se puede ingresar en Soles SIN IGV (así llegan la mayoría de las facturas
- * locales) o directo en Dólares (para proveedores extranjeros que ya facturan en USD).
- * Cuando es en Soles, se convierte acá a USD con el tipo de cambio fijo de la app
- * (`TIPO_CAMBIO_POR_DEFECTO`, hoy 3.4) — ese USD es el que de verdad se suma al Gasto
- * Real; nunca se confía en un monto en USD calculado del lado del navegador.
+ * Antes este archivo tenía, por error, la lógica de REGISTRAR UNA FACTURA (de cuando se
+ * copió como punto de partida) en vez de la de agregar una línea — por eso el formulario
+ * "Nueva línea de gasto OPEX" siempre fallaba con "Línea de gasto inválida.": el cuerpo
+ * que mandaba (empresa/grupoGasto/subgrupoGasto/lineaGasto/...) no tenía nada que ver
+ * con lo que el código de antes esperaba (filaPresupuesto/mes/monto/proveedor...).
+ *
+ * "Presupuesto 2026" es una Tabla de Excel real (a diferencia de BD_CAPEX, que es un
+ * rango suelto) — se agrega la fila con el endpoint nativo de Tablas de Graph
+ * (`agregarFilaTabla`, mismo que ya usa Facturas OPEX), dejando sin especificar (`null`)
+ * las 3 columnas calculadas del final (Gasto Real 2026/Forecast 2026/Diferencia): al
+ * agregar una fila por este endpoint, Excel les pone sola la misma fórmula que ya tiene
+ * el resto de filas de la Tabla, en vez de que la app tenga que adivinar el texto exacto
+ * de esa fórmula.
  */
 export async function POST(request: Request) {
   const config = obtenerConfiguracionOpex();
@@ -61,151 +42,51 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `Falta configurar en .env.local: ${faltantes.join(", ")}.` }, { status: 500 });
   }
 
-  const cuerpo = (await request.json().catch(() => null)) as CuerpoRegistro | null;
+  const cuerpo = (await request.json().catch(() => null)) as CuerpoNuevaLinea | null;
   if (!cuerpo) return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
 
-  const { filaPresupuesto, mes, moneda, monto: montoIngresado, proveedor, numeroComprobante, comentario, ruc } = cuerpo;
+  const empresa = cuerpo.empresa?.trim() ?? "";
+  const grupoGasto = cuerpo.grupoGasto?.trim() ?? "";
+  const subgrupoGasto = cuerpo.subgrupoGasto?.trim() ?? "";
+  const lineaGasto = cuerpo.lineaGasto?.trim() ?? "";
+  const moneda = cuerpo.moneda?.trim() || "USD";
+  const detalle = cuerpo.detalle?.trim() ?? "";
+  const responsable = cuerpo.responsable?.trim() ?? "";
+  const presupuestoAprobado = Number(cuerpo.presupuestoAprobado);
 
-  if (!Number.isInteger(filaPresupuesto) || filaPresupuesto < 2) {
-    return NextResponse.json({ error: "Línea de gasto inválida." }, { status: 400 });
+  if (!empresa) return NextResponse.json({ error: "Falta la Empresa." }, { status: 400 });
+  if (!grupoGasto) return NextResponse.json({ error: "Falta el Grupo de Gasto." }, { status: 400 });
+  if (!subgrupoGasto) return NextResponse.json({ error: "Falta el Subgrupo de Gasto." }, { status: 400 });
+  if (!lineaGasto) return NextResponse.json({ error: "Línea de gasto inválida." }, { status: 400 });
+  if (!Number.isFinite(presupuestoAprobado) || presupuestoAprobado < 0) {
+    return NextResponse.json({ error: "El Presupuesto Aprobado debe ser un número válido." }, { status: 400 });
   }
-  if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
-    return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
-  }
-  if (moneda !== "PEN" && moneda !== "USD" && moneda !== "EUR") {
-    return NextResponse.json({ error: "Moneda inválida." }, { status: 400 });
-  }
-  // Negativo se permite a propósito: es como se registra un descuento o nota de crédito
-  // (resta del Gasto Real en vez de sumar, más abajo). Solo 0 no tiene sentido.
-  if (!Number.isFinite(montoIngresado) || montoIngresado === 0) {
-    const nombreMoneda = moneda === "PEN" ? "en Soles" : moneda === "EUR" ? "en Euros" : "en dólares";
-    return NextResponse.json(
-      { error: `El monto ${nombreMoneda} no puede ser 0 (usa negativo para un descuento o nota de crédito).` },
-      { status: 400 }
-    );
-  }
-  if (!proveedor?.trim()) {
-    return NextResponse.json({ error: "Falta el Proveedor." }, { status: 400 });
-  }
-
-  // Única fuente de verdad para los tipos de cambio de registro: nunca se reciben del
-  // navegador, así ninguna factura puede quedar con una conversión manipulada.
-  const tipoCambio = TIPO_CAMBIO_POR_DEFECTO; // Soles↔Dólar — aplica siempre
-  const tipoCambioEur = TIPO_CAMBIO_EUR_POR_DEFECTO; // Euro↔Dólar — solo aplica si moneda === "EUR"
-  if (!Number.isFinite(tipoCambio) || tipoCambio <= 0 || !Number.isFinite(tipoCambioEur) || tipoCambioEur <= 0) {
-    // No debería pasar nunca (son constantes fijas), pero si algún día vuelven a
-    // resolverse mal en el bundle del servidor, mejor fallar fuerte acá que guardar un
-    // Monto (USD) en null/0 sin que nadie se entere.
-    return NextResponse.json({ error: "Tipo de cambio inválido en el servidor." }, { status: 500 });
-  }
-  // El USD es siempre lo que de verdad mueve el Gasto Real. Si la persona ya ingresó en
-  // dólares, se usa tal cual; en Soles se divide por el tipo de cambio Soles↔Dólar; en
-  // Euros se multiplica por el tipo de cambio Euro↔Dólar. "Monto Soles"/"Monto Euros"
-  // solo se guardan cuando la factura de verdad se originó en esa moneda.
-  const monto =
-    moneda === "USD"
-      ? Math.round(montoIngresado * 100) / 100
-      : moneda === "EUR"
-        ? Math.round(montoIngresado * tipoCambioEur * 100) / 100
-        : Math.round((montoIngresado / tipoCambio) * 100) / 100;
-  const montoSoles = moneda === "PEN" ? montoIngresado : null;
-  const montoEuros = moneda === "EUR" ? montoIngresado : null;
 
   try {
     const archivo = await resolverArchivoPorShareUrl(config);
-    const hojaPresupuesto = process.env.SP_OPEX_HOJA_PRESUPUESTO?.trim() || "Presupuesto 2026";
-    const hojaFacturas = process.env.SP_OPEX_HOJA_FACTURAS?.trim() || "Facturas Opex - App";
+    const hoja = process.env.SP_OPEX_HOJA_PRESUPUESTO?.trim() || "Presupuesto 2026";
 
-    // Un mes ya CERRADO sí se puede registrar (queda en el historial de "Facturas Opex -
-    // App"), pero NUNCA suma al Gasto Real de Presupuesto 2026 — mismo mes de cierre que
-    // usa el Dashboard, guardado en el Excel (hoja "Config App") y ajustable desde el
-    // botón "Cerrar mes" en Presupuesto OPEX.
-    const mesCierre = await leerMesCierre(config, archivo);
-    const esMesPasado = mes <= mesCierre;
-
-    // 1) Confirma que la línea de gasto existe.
-    const contenido = await descargarContenido(config, archivo);
-    const wb = leerWorkbook(contenido);
-    const lineas = extraerPresupuestoOpex(wb, hojaPresupuesto);
-    const linea = lineas.find((l) => l.filaExcel === filaPresupuesto);
-    if (!linea) {
-      return NextResponse.json({ error: `No se encontró esa línea de gasto en ${hojaPresupuesto}.` }, { status: 404 });
+    const fila: Array<string | number | null> = new Array(COL_PPTO_OPEX.presupuestoAprobado + 1).fill("");
+    fila[COL_PPTO_OPEX.empresa] = empresa;
+    fila[COL_PPTO_OPEX.grupoGasto] = grupoGasto;
+    fila[COL_PPTO_OPEX.subgrupoGasto] = subgrupoGasto;
+    fila[COL_PPTO_OPEX.lineaGasto] = lineaGasto;
+    fila[COL_PPTO_OPEX.status] = "Activa";
+    fila[COL_PPTO_OPEX.moneda] = moneda;
+    fila[COL_PPTO_OPEX.detalle] = detalle;
+    fila[COL_PPTO_OPEX.responsable] = responsable;
+    for (let m = 0; m < 12; m++) {
+      fila[COL_PPTO_OPEX.primerMesProyectado + m * 2] = 0;
+      fila[COL_PPTO_OPEX.primerMesReal + m * 2] = 0;
     }
+    fila[COL_PPTO_OPEX.presupuestoAprobado] = presupuestoAprobado;
+    // Gasto Real 2026 / Forecast 2026 / Diferencia: columnas calculadas de la Tabla, al
+    // final — se dejan como `null` a propósito (ver comentario de arriba).
+    fila.push(null, null, null);
 
-    // 2) Crea la hoja de facturas (con encabezados) si es la primera vez que se usa.
-    await crearHojaSiNoExiste(config, archivo, hojaFacturas);
-    const contenidoActualizado = await descargarContenido(config, archivo);
-    const wbActualizado = leerWorkbook(contenidoActualizado);
-    const hojaExisteConDatos = wbActualizado.Sheets[hojaFacturas]?.["!ref"] != null;
-    if (!hojaExisteConDatos) {
-      // Hoja recién creada, todavía sin nada — escribe el encabezado.
-      await escribirFila(
-        config,
-        archivo,
-        hojaFacturas,
-        1,
-        "A",
-        columnaALetra(ENCABEZADOS_FACTURAS_OPEX_COMPLETO.length - 1),
-        ENCABEZADOS_FACTURAS_OPEX_COMPLETO
-      );
-    }
+    await agregarFilaTabla(config, archivo, hoja, fila);
 
-    // 3) Agrega la factura al final de esa hoja — vía la Tabla de Excel de la hoja (no
-    // calculando nosotros "última fila + 1"), para no pisar otra factura que se haya
-    // registrado casi al mismo tiempo. Ver el comentario de `agregarFilaTabla` en
-    // sharepoint.ts.
-    await asegurarTablaEnHoja(config, archivo, hojaFacturas, ENCABEZADOS_FACTURAS_OPEX_COMPLETO);
-    await agregarFilaTabla(config, archivo, hojaFacturas, [
-      fechaAExcelSerial(new Date()),
-      linea.grupoNegocio,
-      linea.prioridad,
-      linea.proyecto,
-      filaPresupuesto,
-      mes,
-      monto,
-      proveedor.trim(),
-      numeroComprobante?.trim() ?? "",
-      linea.responsable,
-      comentario?.trim() ?? "",
-      esMesPasado ? "ok (mes pasado, no afecta presupuesto)" : "ok",
-      montoSoles ?? "",
-      tipoCambio,
-      linea.subNegocio,
-      moneda,
-      ruc?.trim() ?? "",
-      montoEuros ?? "",
-      moneda === "EUR" ? tipoCambioEur : "",
-    ]);
-
-    // Un mes pasado queda solo en el historial — nunca toca Presupuesto 2026.
-    if (esMesPasado) {
-      return NextResponse.json({
-        ok: true,
-        monto,
-        montoSoles,
-        tipoCambio,
-        presupuestoActualizado: false,
-        aviso: `Mes pasado: la factura quedó registrada en el historial, pero no se sumó al Gasto Real de ${hojaPresupuesto}.`,
-      });
-    }
-
-    // 4) Suma el monto (USD) al Gasto Real del mes correspondiente en Presupuesto 2026.
-    const colReal = columnaALetra(COL_PPTO_OPEX.primerMesReal + (mes - 1) * 2);
-    const direccionReal = `${colReal}${filaPresupuesto}`;
-    const valorActual = await leerCelda(config, archivo, hojaPresupuesto, direccionReal);
-    const nuevoValor = valorActual + monto;
-    await escribirCelda(config, archivo, hojaPresupuesto, direccionReal, nuevoValor);
-
-    return NextResponse.json({
-      ok: true,
-      monto,
-      montoSoles,
-      tipoCambio,
-      presupuestoActualizado: true,
-      celdaActualizada: `${hojaPresupuesto}!${direccionReal}`,
-      gastoRealAnterior: valorActual,
-      gastoRealNuevo: nuevoValor,
-    });
+    return NextResponse.json({ ok: true });
   } catch (e) {
     const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
     return NextResponse.json({ error: mensaje }, { status: 502 });

@@ -625,7 +625,9 @@ export async function agregarFilaTabla(
   config: ConfiguracionSharePoint,
   archivo: ArchivoResuelto,
   hoja: string,
-  valores: Array<string | number>
+  /** `null` en una posición = no especificar esa celda — en una columna calculada de la
+   *  Tabla (misma fórmula en todas las filas), Excel la rellena sola al agregar la fila. */
+  valores: Array<string | number | null>
 ): Promise<void> {
   const idTabla = await idPrimeraTablaDeHoja(config, archivo, hoja);
   if (!idTabla) {
