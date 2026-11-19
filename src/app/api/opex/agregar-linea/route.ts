@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { ErrorSharePoint, agregarFilaTabla, camposFaltantesOpex, obtenerConfiguracionOpex, resolverArchivoPorShareUrl } from "@/lib/sharepoint";
+import {
+  ErrorSharePoint,
+  agregarFilaTabla,
+  camposFaltantesOpex,
+  contarColumnasTabla,
+  obtenerConfiguracionOpex,
+  resolverArchivoPorShareUrl,
+} from "@/lib/sharepoint";
 import { COL_PPTO_OPEX } from "@/lib/opex-parse";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +90,17 @@ export async function POST(request: Request) {
     // Gasto Real 2026 / Forecast 2026 / Diferencia: columnas calculadas de la Tabla, al
     // final — se dejan como `null` a propósito (ver comentario de arriba).
     fila.push(null, null, null);
+
+    // El endpoint rows/add de Graph exige que el array calce EXACTO con el ancho real de
+    // la Tabla (ni una columna de más ni de menos) — se completa con `null` lo que haga
+    // falta hasta esa cantidad exacta, en vez de adivinar un ancho fijo.
+    const columnasReales = await contarColumnasTabla(config, archivo, hoja);
+    if (columnasReales < fila.length) {
+      throw new ErrorSharePoint(
+        `La Tabla de "${hoja}" tiene menos columnas (${columnasReales}) de las que esta app espera escribir (${fila.length}) — avisa a soporte antes de reintentar, puede haber cambiado el orden de columnas en el Excel.`
+      );
+    }
+    while (fila.length < columnasReales) fila.push(null);
 
     await agregarFilaTabla(config, archivo, hoja, fila);
 

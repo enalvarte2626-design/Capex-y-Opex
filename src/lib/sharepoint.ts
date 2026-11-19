@@ -606,6 +606,22 @@ export async function asegurarTablaEnHoja(
 }
 
 /**
+ * Cuántas columnas tiene de verdad la primera Tabla de Excel de una hoja — para armar un
+ * array de `agregarFilaTabla` del ancho exacto que la Tabla espera (el endpoint
+ * `rows/add` de Graph responde 400 "El número de filas o columnas... no coincide" si el
+ * array no calza ni una columna de más o de menos con la Tabla real).
+ */
+export async function contarColumnasTabla(config: ConfiguracionSharePoint, archivo: ArchivoResuelto, hoja: string): Promise<number> {
+  const idTabla = await idPrimeraTablaDeHoja(config, archivo, hoja);
+  if (!idTabla) {
+    throw new ErrorSharePoint(`La hoja "${hoja}" no tiene ninguna Tabla de Excel definida.`);
+  }
+  const res = await graphFetch(config, `/drives/${archivo.driveId}/items/${archivo.itemId}/workbook/tables('${idTabla}')/columns?$select=name`);
+  const datos = await res.json();
+  return (datos.value ?? []).length;
+}
+
+/**
  * Agrega una fila al FINAL de la tabla de Excel de una hoja — usando el endpoint nativo
  * `tables/{id}/rows/add` de Graph en vez de calcular nosotros mismos "cuál es la última
  * fila con datos" y escribir ahí con `escribirFila`.
