@@ -87,9 +87,12 @@ export async function POST(request: Request) {
       fila[COL_PPTO_OPEX.primerMesReal + m * 2] = 0;
     }
     fila[COL_PPTO_OPEX.presupuestoAprobado] = presupuestoAprobado;
-    // Gasto Real 2026 / Forecast 2026 / Diferencia: columnas calculadas de la Tabla, al
-    // final — se dejan como `null` a propósito (ver comentario de arriba).
-    fila.push(null, null, null);
+    // Gasto Real 2026 / Forecast 2026: columnas calculadas de la Tabla, al final — se
+    // dejan como `null` a propósito (ver comentario de arriba). "Diferencia" NO es una
+    // columna propia de esta Tabla (se confirmó probando contra el Excel real: la Tabla
+    // tiene 37 columnas, dos más que Presupuesto Aprobado, no tres) — la app la calcula
+    // aparte, nunca la lee ni la escribe acá.
+    fila.push(null, null);
 
     // El endpoint rows/add de Graph exige que el array calce EXACTO con el ancho real de
     // la Tabla (ni una columna de más ni de menos) — se completa con `null` lo que haga
