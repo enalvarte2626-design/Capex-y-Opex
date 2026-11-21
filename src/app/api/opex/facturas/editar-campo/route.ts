@@ -71,6 +71,26 @@ export async function POST(request: Request) {
     }
   }
 
+  // Monto en Soles sin IGV — solo corrige esa referencia (ej. se había puesto el monto
+  // CON IGV por error); nunca toca el Monto (USD) ni el Gasto Real de Presupuesto 2026,
+  // eso se ajusta aparte con el campo Monto. Solo aplica a facturas ingresadas en Soles
+  // (si el valor es calculado a partir del USD, este campo ni siquiera se muestra
+  // editable).
+  if (campo === "montoSoles") {
+    const monto = Number(valorCrudo);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      return NextResponse.json({ error: "El monto en Soles debe ser un número mayor a 0." }, { status: 400 });
+    }
+    try {
+      const archivo = await resolverArchivoPorShareUrl(config);
+      await escribirCelda(config, archivo, HOJA_FACTURAS(), `${columnaALetra(COL_FACTURAS_OPEX.montoSoles)}${fila}`, monto);
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
+      return NextResponse.json({ error: mensaje }, { status: 502 });
+    }
+  }
+
   const indiceColumna = CAMPOS_TEXTO[campo];
   if (indiceColumna === undefined) {
     return NextResponse.json({ error: `Campo "${campo}" no es editable.` }, { status: 400 });

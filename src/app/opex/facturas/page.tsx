@@ -601,20 +601,8 @@ export default function FacturasOpex() {
                       soloLectura={!puedeEditar}
                     />
                   </td>
-                  <td
-                    className="py-1.5 pr-3 text-right text-xs"
-                    style={{ color: "var(--texto-suave)" }}
-                    title={
-                      f.moneda === "EUR"
-                        ? "Factura ingresada en Euros — equivalente en Soles solo de referencia"
-                        : f.montoSolesEsCalculado
-                          ? "Factura ingresada en Dólares — equivalente en Soles solo de referencia"
-                          : undefined
-                    }
-                  >
-                    {f.montoSoles != null
-                      ? `${f.montoSolesEsCalculado ? "≈ " : ""}S/ ${f.montoSoles.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${f.tipoCambio ? ` (TC ${f.tipoCambio})` : ""}`
-                      : "—"}
+                  <td className="py-1.5 pr-3 text-right text-xs" style={{ color: "var(--texto-suave)" }}>
+                    <CampoMontoSoles factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} soloLectura={!puedeEditar} />
                     {f.moneda === "EUR" && f.montoEuros != null && (
                       <div>
                         € {f.montoEuros.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -808,6 +796,95 @@ function CampoMesOpex({
  *  de gasto y mes de forma directa al registrarla (a diferencia de CAPEX, no hace falta
  *  adivinar por texto). Esta edición sigue siendo directo en USD — a propósito no se
  *  tocó, el cambio de Soles/IGV es solo para el registro inicial. */
+/** Corrige el Monto en Soles sin IGV (ej. se ingresó CON IGV por error) — solo aplica a
+ *  facturas ingresadas en Soles (el valor real guardado, no un cálculo de referencia).
+ *  NUNCA toca el Monto (USD) ni el Gasto Real; eso se corrige aparte con el campo Monto. */
+function CampoMontoSoles({
+  factura,
+  onGuardado,
+  soloLectura,
+}: {
+  factura: FacturaOpex;
+  onGuardado: (cambios: Partial<FacturaOpex>) => void;
+  soloLectura?: boolean;
+}) {
+  const [valorLocal, setValorLocal] = useState(String(factura.montoSoles ?? ""));
+  const [enfocado, setEnfocado] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!enfocado) setValorLocal(String(factura.montoSoles ?? ""));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [factura.montoSoles]);
+
+  // Ni editable ni hay nada que corregir: es un cálculo de referencia (factura
+  // ingresada en USD/EUR), no un valor real guardado en esa celda.
+  if (soloLectura || factura.montoSoles == null || factura.montoSolesEsCalculado) {
+    return (
+      <span title={factura.montoSolesEsCalculado ? "Factura ingresada en otra moneda — equivalente en Soles solo de referencia" : undefined}>
+        {factura.montoSoles != null
+          ? `${factura.montoSolesEsCalculado ? "≈ " : ""}S/ ${factura.montoSoles.toLocaleString("es-PE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${factura.tipoCambio ? ` (TC ${factura.tipoCambio})` : ""}`
+          : "—"}
+      </span>
+    );
+  }
+
+  async function guardar() {
+    setEnfocado(false);
+    const nuevo = Number(valorLocal);
+    if (!Number.isFinite(nuevo) || nuevo <= 0 || nuevo === factura.montoSoles) {
+      setValorLocal(String(factura.montoSoles));
+      return;
+    }
+    setError(null);
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/opex/facturas/editar-campo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fila: factura.filaExcel, campo: "montoSoles", valor: nuevo }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo guardar.");
+      onGuardado({ montoSoles: nuevo });
+    } catch (e) {
+      setValorLocal(String(factura.montoSoles));
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-end gap-0.5">
+        <span>S/</span>
+        <input
+          type="text"
+          inputMode="decimal"
+          className="text-right text-xs"
+          style={{ background: "transparent", border: "1px solid transparent", width: "100%", opacity: guardando ? 0.6 : 1 }}
+          value={valorLocal}
+          disabled={guardando}
+          onChange={(e) => setValorLocal(e.target.value)}
+          onFocus={() => setEnfocado(true)}
+          onBlur={guardar}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+        />
+      </div>
+      {factura.tipoCambio && <div>TC {factura.tipoCambio}</div>}
+      {error && (
+        <p className="text-xs mt-0.5" style={{ color: "var(--peligro)" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function MontoFactura({
   factura,
   onGuardado,
