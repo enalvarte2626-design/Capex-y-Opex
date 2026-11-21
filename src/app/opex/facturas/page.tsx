@@ -564,8 +564,8 @@ export default function FacturasOpex() {
             <tbody>
               {(busquedaFactura ? facturasFiltradas : facturasFiltradas.slice(0, 25)).map((f) => (
                 <tr key={f.filaExcel} style={{ borderTop: "1px solid var(--borde)" }}>
-                  <td className="py-1.5 pr-3 text-xs" style={{ color: "var(--texto-suave)" }}>
-                    {f.fecha}
+                  <td className="py-1.5 pr-3">
+                    <CampoFechaOpex factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} soloLectura={!puedeEditar} />
                   </td>
                   <td className="py-1.5 pr-3 truncate text-xs" style={{ color: "var(--texto-suave)" }} title={f.empresa}>
                     {f.empresa || "—"}
@@ -579,8 +579,8 @@ export default function FacturasOpex() {
                   <td className="py-1.5 pr-3 truncate" style={{ color: "var(--texto-suave)" }} title={f.lineaGasto}>
                     {f.lineaGasto}
                   </td>
-                  <td className="py-1.5 pr-3 text-xs" style={{ color: "var(--texto-suave)" }}>
-                    {f.mes ? NOMBRES_MES_CIERRE[f.mes - 1] : "—"}
+                  <td className="py-1.5 pr-3">
+                    <CampoMesOpex factura={f} onGuardado={(cambios) => actualizarFacturaLocal(f.filaExcel, cambios)} soloLectura={!puedeEditar} />
                   </td>
                   <td className="py-1.5 pr-3">
                     <CampoEditable
@@ -671,6 +671,135 @@ export default function FacturasOpex() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Corrige la Fecha de emisión de una factura ya registrada — mismo criterio que CAPEX. */
+function CampoFechaOpex({
+  factura,
+  onGuardado,
+  soloLectura,
+}: {
+  factura: FacturaOpex;
+  onGuardado: (cambios: Partial<FacturaOpex>) => void;
+  soloLectura?: boolean;
+}) {
+  const [valor, setValor] = useState(factura.fechaISO);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setValor(factura.fechaISO), [factura.fechaISO]);
+
+  if (soloLectura) {
+    return <span className="text-xs">{factura.fecha || "—"}</span>;
+  }
+
+  async function guardar() {
+    if (!valor || valor === factura.fechaISO) return;
+    setError(null);
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/opex/facturas/editar-campo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fila: factura.filaExcel, campo: "fecha", valor }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo guardar.");
+      const fecha = new Date(valor);
+      onGuardado({ fechaISO: valor, fecha: fecha.toLocaleDateString("es-PE") });
+    } catch (e) {
+      setValor(factura.fechaISO);
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div>
+      <input
+        type="date"
+        className="text-xs"
+        style={{ background: "transparent", border: "1px solid transparent", width: "100%", opacity: guardando ? 0.6 : 1 }}
+        value={valor}
+        disabled={guardando}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={guardar}
+      />
+      {error && (
+        <p className="text-xs mt-0.5" style={{ color: "var(--peligro)" }}>
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Corrige el Mes al que pertenece el gasto (independiente de la Fecha de emisión) —
+ *  solo cambia esta etiqueta/dato; NUNCA vuelve a sumar ni restar del Gasto Real de
+ *  Presupuesto 2026 (ese ajuste, si hiciera falta, se hace aparte con el campo Monto). */
+function CampoMesOpex({
+  factura,
+  onGuardado,
+  soloLectura,
+}: {
+  factura: FacturaOpex;
+  onGuardado: (cambios: Partial<FacturaOpex>) => void;
+  soloLectura?: boolean;
+}) {
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (soloLectura) {
+    return <span className="text-xs">{factura.mes ? NOMBRES_MES_CIERRE[factura.mes - 1] : "—"}</span>;
+  }
+
+  async function guardar(valor: string) {
+    const mes = Number(valor);
+    if (!Number.isInteger(mes) || mes === factura.mes) return;
+    setError(null);
+    setGuardando(true);
+    try {
+      const res = await fetch("/api/opex/facturas/editar-campo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fila: factura.filaExcel, campo: "mes", valor: mes }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "No se pudo guardar.");
+      onGuardado({ mes });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div>
+      <select
+        className="text-xs"
+        style={{ background: "transparent", border: "1px solid transparent", width: "100%", opacity: guardando ? 0.6 : 1 }}
+        value={factura.mes ?? ""}
+        disabled={guardando}
+        onChange={(e) => guardar(e.target.value)}
+      >
+        <option value="" disabled>
+          —
+        </option>
+        {NOMBRES_MES_CIERRE.map((nombre, i) => (
+          <option key={nombre} value={i + 1}>
+            {nombre}
+          </option>
+        ))}
+      </select>
+      {error && (
+        <p className="text-xs mt-0.5" style={{ color: "var(--peligro)" }}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }

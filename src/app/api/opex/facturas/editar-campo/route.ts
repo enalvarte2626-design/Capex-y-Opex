@@ -7,6 +7,7 @@ import {
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
 import { COL_FACTURAS_OPEX } from "@/lib/opex-parse";
+import { fechaAExcelSerial } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,39 @@ export async function POST(request: Request) {
 
   if (!Number.isInteger(fila) || fila < 2) {
     return NextResponse.json({ error: "Fila inválida." }, { status: 400 });
+  }
+
+  if (campo === "fecha") {
+    const fecha = new Date(valorCrudo);
+    if (Number.isNaN(fecha.getTime())) {
+      return NextResponse.json({ error: "Fecha inválida." }, { status: 400 });
+    }
+    try {
+      const archivo = await resolverArchivoPorShareUrl(config);
+      await escribirCelda(config, archivo, HOJA_FACTURAS(), `${columnaALetra(COL_FACTURAS_OPEX.fecha)}${fila}`, fechaAExcelSerial(fecha));
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
+      return NextResponse.json({ error: mensaje }, { status: 502 });
+    }
+  }
+
+  // Mes al que pertenece el gasto en el presupuesto — solo corrige el dato/etiqueta de
+  // esta factura, NUNCA recalcula el Gasto Real de Presupuesto 2026 (ese ajuste, si
+  // hiciera falta, se hace aparte con el campo Monto).
+  if (campo === "mes") {
+    const mes = Number(valorCrudo);
+    if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
+      return NextResponse.json({ error: "Mes inválido." }, { status: 400 });
+    }
+    try {
+      const archivo = await resolverArchivoPorShareUrl(config);
+      await escribirCelda(config, archivo, HOJA_FACTURAS(), `${columnaALetra(COL_FACTURAS_OPEX.mes)}${fila}`, mes);
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
+      return NextResponse.json({ error: mensaje }, { status: 502 });
+    }
   }
 
   const indiceColumna = CAMPOS_TEXTO[campo];

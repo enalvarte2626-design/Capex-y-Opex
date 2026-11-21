@@ -187,6 +187,9 @@ export function extraerPresupuestoOpex(wb: XLSX.WorkBook, nombreHoja: string): P
 export interface FacturaOpex {
   filaExcel: number;
   fecha: string;
+  /** "aaaa-mm-dd", para poder editarla con un <input type="date"> — vacío si la celda no
+   *  trae ninguna fecha reconocible. */
+  fechaISO: string;
   grupoGasto: string;
   subgrupoGasto: string;
   lineaGasto: string;
@@ -245,12 +248,16 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
 
     const fechaCruda = fila[COL_FACTURAS_OPEX.fecha];
     let fecha: string;
+    let fechaISO = "";
     if (fechaCruda instanceof Date) {
       fecha = fechaCruda.toLocaleDateString("es-PE");
+      fechaISO = fechaCruda.toISOString().slice(0, 10);
     } else if (typeof fechaCruda === "number" && fechaCruda > 0) {
       // Serial de Excel sin formato de fecha aplicado (así queda al escribirla desde la
       // app) — se convierte acá para mostrar una fecha real, no el número crudo.
-      fecha = serialExcelAFecha(fechaCruda).toLocaleDateString("es-PE", { timeZone: "UTC" });
+      const fechaObj = serialExcelAFecha(fechaCruda);
+      fecha = fechaObj.toLocaleDateString("es-PE", { timeZone: "UTC" });
+      fechaISO = fechaObj.toISOString().slice(0, 10);
     } else {
       fecha = aTexto(fechaCruda);
     }
@@ -293,6 +300,7 @@ export function extraerFacturasOpex(wb: XLSX.WorkBook, nombreHoja: string): Fact
     facturas.push({
       filaExcel: i + 1,
       fecha,
+      fechaISO,
       grupoGasto: aTexto(fila[COL_FACTURAS_OPEX.grupoGasto]),
       subgrupoGasto: aTexto(fila[COL_FACTURAS_OPEX.subgrupoGasto]),
       lineaGasto,
