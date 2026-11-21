@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import {
   ErrorSharePoint,
   camposFaltantesOpex,
+  descargarContenido,
   escribirCelda,
+  leerCelda,
   obtenerConfiguracionOpex,
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
-import { COL_FACTURAS_OPEX } from "@/lib/opex-parse";
-import { fechaAExcelSerial } from "@/lib/capex-parse";
+import { COL_FACTURAS_OPEX, COL_PPTO_OPEX, extraerFacturasOpex } from "@/lib/opex-parse";
+import { fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
 
 export const dynamic = "force-dynamic";
@@ -71,20 +73,55 @@ export async function POST(request: Request) {
     }
   }
 
-  // Monto en Soles sin IGV — solo corrige esa referencia (ej. se había puesto el monto
-  // CON IGV por error); nunca toca el Monto (USD) ni el Gasto Real de Presupuesto 2026,
-  // eso se ajusta aparte con el campo Monto. Solo aplica a facturas ingresadas en Soles
-  // (si el valor es calculado a partir del USD, este campo ni siquiera se muestra
-  // editable).
+  // Monto en Soles sin IGV — ej. se había puesto el monto CON IGV por error. Solo
+  // aplica a facturas ingresadas en Soles (si el valor es calculado a partir del USD,
+  // este campo ni siquiera se muestra editable). Recalcula el Monto (USD) con el MISMO
+  // tipo de cambio ya guardado en esa factura (el que de verdad se usó al registrarla)
+  // y ajusta el Gasto Real de Presupuesto 2026 por la diferencia, igual que
+  // /api/opex/facturas/editar-monto — así no hay que corregir los dos campos por
+  // separado ni arriesgarse a que queden descuadrados entre sí.
   if (campo === "montoSoles") {
-    const monto = Number(valorCrudo);
-    if (!Number.isFinite(monto) || monto <= 0) {
+    const montoSolesNuevo = Number(valorCrudo);
+    if (!Number.isFinite(montoSolesNuevo) || montoSolesNuevo <= 0) {
       return NextResponse.json({ error: "El monto en Soles debe ser un número mayor a 0." }, { status: 400 });
     }
     try {
       const archivo = await resolverArchivoPorShareUrl(config);
-      await escribirCelda(config, archivo, HOJA_FACTURAS(), `${columnaALetra(COL_FACTURAS_OPEX.montoSoles)}${fila}`, monto);
-      return NextResponse.json({ ok: true });
+      const hojaPresupuesto = process.env.SP_OPEX_HOJA_PRESUPUESTO?.trim() || "Presupuesto 2026";
+      const hojaFacturas = HOJA_FACTURAS();
+
+      const contenido = await descargarContenido(config, archivo);
+      const wb = leerWorkbook(contenido);
+      const factura = extraerFacturasOpex(wb, hojaFacturas).find((f) => f.filaExcel === fila);
+      if (!factura) {
+        return NextResponse.json({ error: "No se encontró esa factura." }, { status: 404 });
+      }
+      if (!factura.tipoCambio) {
+        return NextResponse.json({ error: "Esta factura no tiene guardado el tipo de cambio usado, así que no se puede recalcular el Monto (USD) con certeza." }, { status: 409 });
+      }
+
+      const montoNuevo = Math.round((montoSolesNuevo / factura.tipoCambio) * 100) / 100;
+      await escribirCelda(config, archivo, hojaFacturas, `${columnaALetra(COL_FACTURAS_OPEX.montoSoles)}${fila}`, montoSolesNuevo);
+      await escribirCelda(config, archivo, hojaFacturas, `${columnaALetra(COL_FACTURAS_OPEX.monto)}${fila}`, montoNuevo);
+
+      if (!factura.filaPresupuesto || !factura.mes) {
+        // El Monto (USD) y el Soles ya quedaron corregidos arriba — solo no se pudo
+        // ajustar el Gasto Real porque esta factura no tiene guardada la línea/mes.
+        return NextResponse.json({
+          ok: true,
+          montoNuevo,
+          avisoGastoReal: "No se pudo ajustar el Gasto Real de Presupuesto 2026 (esta factura no tiene guardada la línea de gasto o el mes) — revísalo a mano si hace falta.",
+        });
+      }
+
+      const colReal = columnaALetra(COL_PPTO_OPEX.primerMesReal + (factura.mes - 1) * 2);
+      const direccionReal = `${colReal}${factura.filaPresupuesto}`;
+      const delta = montoNuevo - factura.monto;
+      const gastoRealAnterior = await leerCelda(config, archivo, hojaPresupuesto, direccionReal);
+      const gastoRealNuevo = gastoRealAnterior + delta;
+      await escribirCelda(config, archivo, hojaPresupuesto, direccionReal, gastoRealNuevo);
+
+      return NextResponse.json({ ok: true, montoNuevo, gastoRealAnterior, gastoRealNuevo });
     } catch (e) {
       const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
       return NextResponse.json({ error: mensaje }, { status: 502 });

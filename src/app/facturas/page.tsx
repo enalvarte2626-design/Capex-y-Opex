@@ -954,7 +954,8 @@ function CampoMontoSoles({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || "No se pudo guardar.");
-      onGuardado({ montoSoles: nuevo });
+      onGuardado({ montoSoles: nuevo, monto: json.montoNuevo ?? factura.monto });
+      if (json.avisoGastoReal) setError(json.avisoGastoReal);
     } catch (e) {
       setValorLocal(String(factura.montoSoles));
       setError((e as Error).message);

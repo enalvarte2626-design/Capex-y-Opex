@@ -2,12 +2,15 @@ import { NextResponse } from "next/server";
 import {
   ErrorSharePoint,
   camposFaltantes,
+  descargarContenido,
   escribirCelda,
+  leerCelda,
   obtenerConfiguracionSharePoint,
   resolverArchivoPorShareUrl,
 } from "@/lib/sharepoint";
-import { COL_FACTURAS, fechaAExcelSerial } from "@/lib/capex-parse";
+import { COL_BD, COL_FACTURAS, extraerFacturas, extraerProyectos, fechaAExcelSerial, leerWorkbook } from "@/lib/capex-parse";
 import { columnaALetra } from "@/lib/capex-editable";
+import { resolverFacturaABDCapex } from "@/lib/capex";
 
 export const dynamic = "force-dynamic";
 
@@ -63,19 +66,57 @@ export async function POST(request: Request) {
     }
   }
 
-  // Monto en Soles sin IGV — solo corrige esa referencia (ej. se había puesto el monto
-  // CON IGV por error); nunca toca el Monto (USD) ni el Gasto Real de BD_CAPEX, eso se
-  // ajusta aparte con el campo Monto. Solo aplica a facturas ingresadas en Soles (si el
-  // valor es calculado a partir del USD, este campo ni siquiera se muestra editable).
+  // Monto en Soles sin IGV — ej. se había puesto el monto CON IGV por error. Solo
+  // aplica a facturas ingresadas en Soles (si el valor es calculado a partir del USD,
+  // este campo ni siquiera se muestra editable). Recalcula el Monto (USD) con el MISMO
+  // tipo de cambio ya guardado en esa factura (el que de verdad se usó al registrarla,
+  // no el actual — por si cambió desde entonces) y ajusta el Gasto Real de BD_CAPEX por
+  // la diferencia, igual que /api/facturas/editar-monto — así no hay que corregir los
+  // dos campos por separado ni arriesgarse a que queden descuadrados entre sí.
   if (campo === "montoSoles") {
-    const monto = Number(valorCrudo);
-    if (!Number.isFinite(monto) || monto <= 0) {
+    const montoSolesNuevo = Number(valorCrudo);
+    if (!Number.isFinite(montoSolesNuevo) || montoSolesNuevo <= 0) {
       return NextResponse.json({ error: "El monto en Soles debe ser un número mayor a 0." }, { status: 400 });
     }
     try {
       const archivo = await resolverArchivoPorShareUrl(config);
-      await escribirCelda(config, archivo, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.montoSoles)}${fila}`, monto);
-      return NextResponse.json({ ok: true });
+      const hojaProyectos = process.env.SP_CAPEX_HOJA?.trim() || "BD_CAPEX";
+
+      const contenido = await descargarContenido(config, archivo);
+      const wb = leerWorkbook(contenido);
+      const factura = extraerFacturas(wb, HOJA_FACTURAS).find((f) => f.filaExcel === fila);
+      if (!factura) {
+        return NextResponse.json({ error: "No se encontró esa factura." }, { status: 404 });
+      }
+      if (!factura.tipoCambio) {
+        return NextResponse.json({ error: "Esta factura no tiene guardado el tipo de cambio usado, así que no se puede recalcular el Monto (USD) con certeza." }, { status: 409 });
+      }
+
+      const montoNuevo = Math.round((montoSolesNuevo / factura.tipoCambio) * 100) / 100;
+      await escribirCelda(config, archivo, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.montoSoles)}${fila}`, montoSolesNuevo);
+      await escribirCelda(config, archivo, HOJA_FACTURAS, `${columnaALetra(COL_FACTURAS.monto)}${fila}`, montoNuevo);
+
+      const proyectos = extraerProyectos(wb, hojaProyectos);
+      const resolucion = resolverFacturaABDCapex(factura, proyectos);
+      if (!resolucion) {
+        // El Monto (USD) y el Soles ya quedaron corregidos arriba — solo no se pudo
+        // ajustar el Gasto Real porque no se identifica con certeza a qué fila/mes
+        // corresponde (mismo caso que ya bloquea editar el Monto directamente).
+        return NextResponse.json({
+          ok: true,
+          montoNuevo,
+          avisoGastoReal: "No se pudo ajustar el Gasto Real de BD_CAPEX (no se identifica con certeza a qué proyecto/mes corresponde esta factura) — revísalo a mano si hace falta.",
+        });
+      }
+
+      const colReal = columnaALetra(COL_BD.primerMesReal + (resolucion.mes - 1) * 2);
+      const direccionReal = `${colReal}${resolucion.filaProyecto}`;
+      const delta = montoNuevo - factura.monto;
+      const gastoRealAnterior = await leerCelda(config, archivo, hojaProyectos, direccionReal);
+      const gastoRealNuevo = gastoRealAnterior + delta;
+      await escribirCelda(config, archivo, hojaProyectos, direccionReal, gastoRealNuevo);
+
+      return NextResponse.json({ ok: true, montoNuevo, gastoRealAnterior, gastoRealNuevo });
     } catch (e) {
       const mensaje = e instanceof ErrorSharePoint ? e.message : `Error inesperado: ${(e as Error).message}`;
       return NextResponse.json({ error: mensaje }, { status: 502 });
